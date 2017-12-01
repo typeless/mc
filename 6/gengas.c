@@ -432,7 +432,7 @@ gengas(Node *file, FILE *fd)
 {
 	Htab *globls, *strtab;
 	Node *n, **blob;
-	Func **fn;
+	Func **fn, *initfn;
 	char dir[1024], *path;
 	size_t nfn, nblob;
 	size_t i;
@@ -445,6 +445,7 @@ gengas(Node *file, FILE *fd)
 
 	fn = NULL;
 	nfn = 0;
+	initfn = NULL;
 	blob = NULL;
 	nblob = 0;
 	globls = mkht(varhash, vareq);
@@ -484,8 +485,31 @@ gengas(Node *file, FILE *fd)
 	fprintf(fd, "\n");
 
 	fprintf(fd, ".text\n");
-	for (i = 0; i < nfn; i++)
+	for (i = 0; i < nfn; i++) {
+		int len = strlen(fn[i]->name);
+		int sufflen = strlen("$__init__");
+
+		/*
+		 * Find init func by matching the suffix
+		 */
+		if (len > sufflen) {
+			if (strncmp(&fn[i]->name[len-sufflen], "$__init__", sufflen) == 0) {
+				initfn = fn[i];
+			}
+		}
+
 		genfunc(fd, fn[i], globls, strtab);
+	}
+
+	if (initfn) {
+		fprintf(fd, ".section .myr_init_array, \"a\", @progbits\n");
+		fprintf(fd, ".align %zd\n", tyalign(initfn->type));
+		fprintf(fd, "myr_init_array:\n");
+		fprintf(fd, ".long %s\n", initfn->name);
+		fprintf(fd, "\n");
+	}
+
+	fprintf(fd, ".section .rodata\n");
 	gentypes(fd);
 	fprintf(fd, "\n");
 
