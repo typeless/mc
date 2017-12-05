@@ -502,10 +502,9 @@ gengas(Node *file, FILE *fd)
 	}
 
 	if (initfn) {
-		fprintf(fd, ".section .myr_init_array, \"a\", @progbits\n");
-		fprintf(fd, ".align %zd\n", tyalign(initfn->type));
-		fprintf(fd, "myr_init_array:\n");
-		fprintf(fd, ".long %s\n", initfn->name);
+		fprintf(fd, ".section .myr_init_array, \"a\"\n");
+		fprintf(fd, ".quad 0\n");
+		fprintf(fd, ".quad %s\n", initfn->name);
 		fprintf(fd, "\n");
 	}
 
