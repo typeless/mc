@@ -70,6 +70,11 @@ expectfcompare() {
 B() {
 	test="$1"; shift
 	type="$1"; shift
+
+	if [ -n "$MTEST_TARGET" ] && [ "$MTEST_TARGET" != "$test" ]; then
+		return 1
+	fi
+
 	if [ $# -gt 0 ]; then
 		res="$1"; shift
 	fi
@@ -88,6 +93,10 @@ B() {
 
 # Should fail
 F() {
+	if [ -n "$MTEST_TARGET" ] && [ "$MTEST_TARGET" != "$test" ]; then
+		return 1
+	fi
+
 	echo "test $1 <<{!"
 	(build $1) > /dev/null 2>1
 	if [ $? -eq '1' ]; then
