@@ -39,7 +39,7 @@ struct Dtree {
 	size_t ncap;
 };
 
-Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
+static Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
 static int addpat(Node *pat, Node *val,
 		Dtree *start, Dtree *accept,
 		Node ***cap, size_t *ncap,
@@ -700,7 +700,7 @@ addpat(Node *pat, Node *val, Dtree *start, Dtree *accept, Node ***cap, size_t *n
 
 
 /* val must be a pure, fully evaluated value */
-Dtree *
+static Dtree *
 gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
 {
 	Dtree *start, *accept, **end;
@@ -731,7 +731,7 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
 	return start;
 }
 
-void
+static void
 genmatchcode(Dtree *dt, Node ***out, size_t *nout)
 {
 	Node *jmp, *eq, *fail;
