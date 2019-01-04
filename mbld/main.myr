@@ -1,4 +1,5 @@
 use std
+use fileutil
 use regex
 use thread
 
@@ -70,6 +71,12 @@ const main = {args : byte[:][:]
 		bld.opt_objdir = objdir
 		ok = buildimm(b, targname, cmd.args)
 	elif runsrc.len != 0
+		if objdir.len == 0
+			match std.mkdtemp("runmyr-build-", 0o600)
+			| `std.Ok d:	objdir = d
+			| `std.Err e:	std.fatal("could not create temporary working directory\n")
+			;;
+		;;
 		bld.opt_objdir = objdir
 		bld.opt_verbosity = -1
 		tmp = std.mktemppath("runmyr")
@@ -81,7 +88,12 @@ const main = {args : byte[:][:]
 			| _:			ok = false
 			;;
 		;;
+
+		/* TODO consider to unify the cleanup code with mbld-clean */
 		std.remove(tmp)
+		//if objdir.len != 0
+		//	fileutil.rmrf(objdir[:])
+		//;;
 	else
 		if objdir.len > 0
 			bld.opt_objdir = objdir
