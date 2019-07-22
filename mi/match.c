@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <ctype.h>
 #include <string.h>
 #include <assert.h>
@@ -37,6 +38,49 @@ struct Dtree {
 	Node **cap;
 	size_t ncap;
 };
+
+static int
+__cyclic(Dtree *t, bool *visited, int nvisited, bool *recursed, int nrecursed)
+{
+	int i;
+	visited[t->id] = true;
+	recursed[t->id] = true;
+	for (i = 0; i < t->nnext; i++) {
+		Dtree *u = t->next[i];
+		if (!visited[u->id] && __cyclic(u, visited, nvisited, recursed, nrecursed)) {
+			return true;
+		} else if (recursed[u->id]) {
+			return true;
+		}
+	}
+	Dtree *u = t->any;
+	if (u != NULL) {
+		if (!visited[u->id] && __cyclic(u, visited, nvisited, recursed, nrecursed)) {
+			return true;
+		} else if (recursed[u->id]) {
+			return true;
+		}
+	}
+	recursed[t->id] = false;
+	return false;
+}
+
+int
+cyclic(Dtree *t, int n)
+{
+	int i;
+	bool visited[n];
+	bool recursed[n];
+
+	for (i = 0; i < n; i++) {
+		visited[i] = recursed[i] = false;
+	}
+
+	if (__cyclic(t, visited, n, recursed, n)) {
+		return true;
+	}
+	return false;
+}
 
 Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
 static int addpat(Node *pat, Node *val,
@@ -150,10 +194,10 @@ addcapture(Node *n, Node **cap, size_t ncap)
 	return n;
 }
 
+static int ndtree;
 static Dtree *
 mkdtree(Srcloc loc, Node *lbl)
 {
-	static int ndtree;
 	Dtree *t;
 
 	t = zalloc(sizeof(Dtree));
@@ -720,6 +764,8 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
 		dtreedump(stdout, start);
 	if (!verifymatch(start))
 		fatal(m, "nonexhaustive pattern set in match statement");
+
+	findentf(stderr, 0, "CYCLED:%d\n", cyclic(start, ndtree));
 	return start;
 }
 
