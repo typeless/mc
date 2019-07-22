@@ -82,6 +82,13 @@ cyclic(Dtree *t, int n)
 	return false;
 }
 
+#define dbgcyc(x)								\
+	do {									\
+		if (cyclic(x, ndtree)) {					\
+			fprintf(stderr, "[CYCLED] %s:%u\n", __func__, __LINE__);	\
+		}								\
+	} while(0)
+
 Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
 static int addpat(Node *pat, Node *val,
 		Dtree *start, Dtree *accept,
@@ -765,6 +772,7 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
 	if (!verifymatch(start))
 		fatal(m, "nonexhaustive pattern set in match statement");
 
+	dbgcyc(start);
 	findentf(stderr, 0, "CYCLED:%d\n", cyclic(start, ndtree));
 	return start;
 }
