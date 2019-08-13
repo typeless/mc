@@ -9,10 +9,14 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #include "util.h"
 #include "parse.h"
 #include "mi.h"
+
+FILE *dotfile;
+static int addpatlevel;
 
 typedef struct Dtree Dtree;
 struct Dtree {
@@ -32,6 +36,7 @@ struct Dtree {
 	size_t npat;
 	Dtree **next;
 	size_t nnext;
+	Type *ty;
 	Dtree *any;
 
 	/* captured variables and action */
@@ -82,11 +87,42 @@ cyclic(Dtree *t, int n)
 	return false;
 }
 
-#define dbgcyc(x)								\
-	do {									\
-		if (cyclic(x, ndtree)) {					\
+void
+dump_dot(Dtree *dtlist[], int n)
+{
+	FILE *fp;
+	int i, j;
+
+	fp = fopen("dtree.dot", "w");
+	if (fp == NULL) {
+		return;
+	}
+
+	findentf(fp, 0, "strict digraph \"dtree-graph\" {\n");
+	for (i = 0; i < n; i++) {
+		Dtree *t = dtlist[i];
+		if (t->accept) {
+			findentf(fp, 1, "\"%s\" [shape=doublecircle]\n", lblstr(t->lbl));
+		}
+		for (j = 0; j < t->nnext; j++) {
+			Dtree *v = t->next[j];
+			findentf(fp, 1, "\"%s\" -> \"%s\" [label=\"%s,%s\"]\n", lblstr(t->lbl), lblstr(v->lbl), opstr[exprop(t->pat[j])], tystr(exprtype(t->pat[j])));
+		}
+		if (t->any) {
+			findentf(fp, 1, "\"%s\" -> \"%s\" [color=green label=\"%s\",]\n", lblstr(t->lbl), lblstr(t->any->lbl), tystr(t->ty));
+		}
+		findentf(fp, 1, "\n");
+	}
+	findentf(fp, 0, "}\n");
+
+	fclose(fp);
+}
+
+#define dbgcyc(x)									\
+	do {										\
+		if (cyclic(x, ndtree)) {						\
 			fprintf(stderr, "[CYCLED] %s:%u\n", __func__, __LINE__);	\
-		}								\
+		}									\
 	} while(0)
 
 Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
@@ -201,6 +237,7 @@ addcapture(Node *n, Node **cap, size_t ncap)
 	return n;
 }
 
+static Dtree *dtlist[2048];
 static int ndtree;
 static Dtree *
 mkdtree(Srcloc loc, Node *lbl)
@@ -208,6 +245,7 @@ mkdtree(Srcloc loc, Node *lbl)
 	Dtree *t;
 
 	t = zalloc(sizeof(Dtree));
+	dtlist[ndtree] = t;
 	t->lbl = lbl;
 	t->loc = loc;
 	t->id = ndtree++;
@@ -322,6 +360,8 @@ isnonrecursive(Dtree *dt, Type *ty)
 	return 0;
 }
 
+static Type *tystack[1024];
+static int tylevel;
 static int
 addwildrec(Srcloc loc, Type *ty, Dtree *start, Dtree *accept, Dtree ***end, size_t *nend)
 {
@@ -331,22 +371,43 @@ addwildrec(Srcloc loc, Type *ty, Dtree *start, Dtree *accept, Dtree ***end, size
 	Ucon *uc;
 	int ret;
 
+	if (dotfile) {
+		tystack[tylevel] = ty;
+		if (tylevel > 0) {
+			Type *pty= tystack[tylevel-1];
+			findentf(dotfile, addpatlevel+tylevel, "\"%s\"-> \"%s\"\n",
+					tystr(pty), tystr(ty));
+		} else {
+			findentf(dotfile, addpatlevel+tylevel, "\"%s\"\n",
+					tystr(ty));
+		}
+	}
+	tylevel++;
+
 	tail = NULL;
 	ntail = 0;
 	ty = tybase(ty);
 	if (ty->type == Typtr && start->any && start->any->ptrwalk) {
 		return addwildrec(loc, ty->sub[0], start->any, accept, end, nend);
 	} else if (isnonrecursive(start, ty)) {
-		if (start->accept || start == accept)
+		if (start->accept || start == accept) {
+			tylevel--;
 			return 0;
+		}
 		for (i = 0; i < start->nnext; i++)
 			lappend(end, nend, start->next[i]);
 		if (start->any) {
+			dbgcyc(start);
 			lappend(end, nend, start->any);
+			dbgcyc(start);
+			tylevel--;
 			return 0;
 		} else {
+			dbgcyc(start);
 			start->any = accept;
 			lappend(end, nend, accept);
+			dbgcyc(start);
+			tylevel--;
 			return 1;
 		}
 	}
@@ -413,12 +474,14 @@ addwildrec(Srcloc loc, Type *ty, Dtree *start, Dtree *accept, Dtree ***end, size
 			}
 		}
 		if (!start->any) {
+			start->ty = ty;
 			start->any = accept;
 			ret = 1;
 		}
 		lappend(&last, &nlast, accept);
 		break;
 	case Tyslice:
+		accept->ty = ty;
 		ret = acceptall(start, accept);
 		lappend(&last, &nlast, accept);
 		break;
@@ -427,6 +490,7 @@ addwildrec(Srcloc loc, Type *ty, Dtree *start, Dtree *accept, Dtree ***end, size
 	}
 	lcat(end, nend, last, nlast);
 	lfree(&last, &nlast);
+	tylevel--;
 	return ret;
 }
 
@@ -690,12 +754,28 @@ addderefpat(Node *pat, Node *val, Dtree *start, Dtree *accept, Node ***cap, size
 	return addpat(pat->expr.args[0], deref, walk, accept, cap, ncap, end, nend);
 }
 
+static Node *ppatstack[1024];
 static int
 addpat(Node *pat, Node *val, Dtree *start, Dtree *accept, Node ***cap, size_t *ncap, Dtree ***end, size_t *nend)
 {
 	int ret;
 	Node *dcl;
 	Type *ty;
+
+	if (dotfile) {
+		ppatstack[addpatlevel] = pat;
+		if (addpatlevel > 0) {
+			Node *ppat = ppatstack[addpatlevel-1];
+			findentf(dotfile, addpatlevel, "\"(%d)%s,%s\"-> \"(%d)%s,%s\"\n",
+					ppat->nid, opstr[exprop(ppat)], tystr(exprtype(ppat)),
+					pat->nid, opstr[exprop(pat)], tystr(exprtype(pat)));
+		} else {
+			findentf(dotfile, addpatlevel, "\"(%d)%s,%s\"\n",
+					pat->nid, opstr[exprop(pat)], tystr(exprtype(pat)));
+		}
+		addpatlevel++;
+		//findentf(dotfile, addpatlevel+1, "rank = same\n");
+	}
 
 	pat = fold(pat, 1);
 	ret = 0;
@@ -738,6 +818,11 @@ addpat(Node *pat, Node *val, Dtree *start, Dtree *accept, Node ***cap, size_t *n
 		fatal(pat, "unsupported pattern %s of type %s", opstr[exprop(pat)], tystr(exprtype(pat)));
 		break;
 	}
+	if (dotfile) {
+		addpatlevel--;
+	//	findentf(dotfile, addpatlevel, "\n");
+	//	findentf(dotfile, addpatlevel, "}\n");
+	}
 	return ret;
 }
 
@@ -757,6 +842,7 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
 	end = NULL;
 	nend = 0;
 	start = mkdtree(m->loc, genlbl(m->loc));
+	findentf(dotfile, 0, "strict digraph \"pattern-graph\" {\n");
 	for (i = 0; i < npat; i++) {
 		cap = NULL;
 		ncap = 0;
@@ -767,6 +853,8 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
 			fatal(pat[i], "pattern matched by earlier case");
 		addcapture(pat[i]->match.block, cap, ncap);
 	}
+	findentf(dotfile, 0, "}\n");
+
 	if (debugopt['M'])
 		dtreedump(stdout, start);
 	if (!verifymatch(start))
@@ -851,6 +939,11 @@ genmatch(Node *m, Node *val, Node ***out, size_t *nout)
 	size_t npat, nlbl, i;
 	Dtree *dt;
 
+	dotfile = fopen("pat.dot", "w");
+	if (dotfile == NULL) {
+		fatal(m, "cannot create dot file");
+	}
+
 	lbl = NULL;
 	nlbl = 0;
 
@@ -862,6 +955,7 @@ genmatch(Node *m, Node *val, Node ***out, size_t *nout)
 
 	endlbl = genlbl(m->loc);
 	dt = gendtree(m, val, lbl, nlbl);
+	dump_dot(dtlist, ndtree);
 	genmatchcode(dt, out, nout);
 
 	for (i = 0; i < npat; i++) {
@@ -877,6 +971,11 @@ genmatch(Node *m, Node *val, Node ***out, size_t *nout)
 		dtreedump(stdout, dt);
 		for (i = 0; i < *nout; i++)
 			dumpn((*out)[i], stdout);
+	}
+
+	if (dotfile != NULL) {
+		fclose(dotfile);
+		dotfile = NULL;
 	}
 }
 
