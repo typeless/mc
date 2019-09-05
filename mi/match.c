@@ -15,6 +15,14 @@
 #include "parse.h"
 #include "mi.h"
 
+/*
+ * 1. A dt node is a state where certain piece of sub-pattern has been matched.
+ * 2. Initially, each pattern clause is assigned with a dt which means that the clause is matched.
+ * 2. Literals and union tags map to dt nodes. Union tags are kind of literals.
+ * 3. In a pattern, aggregate types are encoded by the edges of the dt nodes. That is, how the nodes are connected.
+ * 4. If a pattern consisting of a single literal pattern, their should be a dt node for it.
+ * 5. The parameter 'accept' means the state when the sub-pattern is matched.
+ */
 FILE *dotfile;
 static int addpatlevel;
 
@@ -319,11 +327,17 @@ verifymatch(Dtree *t)
 		return 1;
 
 	ret = 0;
-	if (t->nnext == t->nconstructors || t->any)
+	if (t->nnext == t->nconstructors || t->any) {
 		ret = 1;
-	for (i = 0; i < t->nnext; i++)
-		if (!verifymatch(t->next[i]))
+	} else {
+		if (dotfile)
+			findentf(stderr, 0, "## <%u> dt->nnext:%d\n", __LINE__, t->nnext);
+	}
+	for (i = 0; i < t->nnext; i++) {
+		if (!verifymatch(t->next[i])) {
 			ret = 0;
+		}
+	}
 	return ret;
 }
 
@@ -394,12 +408,10 @@ addwildrec(Srcloc loc, Type *ty, Dtree *start, Dtree *accept, Dtree ***end, size
 			tylevel--;
 			return 0;
 		}
-		for (i = 0; i < start->nnext; i++)
-			lappend(end, nend, start->next[i]);
+		//for (i = 0; i < start->nnext; i++)
+		//	lappend(end, nend, start->next[i]);
 		if (start->any) {
-			dbgcyc(start);
 			lappend(end, nend, start->any);
-			dbgcyc(start);
 			tylevel--;
 			return 0;
 		} else {
@@ -627,6 +639,7 @@ addlit(Node *pat, Node *val, Dtree *start, Dtree *accept, Node ***cap, size_t *n
 			start->nconstructors = nconstructors(exprtype(pat));
 		}
 		lappend(&start->pat, &start->npat, pat);
+		// nconstructors should be equal to nnext
 		lappend(&start->next, &start->nnext, accept);
 		lappend(end, nend, accept);
 		return 1;
@@ -860,7 +873,6 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
 	if (!verifymatch(start))
 		fatal(m, "nonexhaustive pattern set in match statement");
 
-	dbgcyc(start);
 	findentf(stderr, 0, "CYCLED:%d\n", cyclic(start, ndtree));
 	return start;
 }
