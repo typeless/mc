@@ -12,39 +12,18 @@
 #include "util.h"
 #include "parse.h"
 #include "mi.h"
+#include "dtree.h"
 
-typedef struct Dtree Dtree;
-struct Dtree {
-	int id;
-	Srcloc loc;
-
-	/* values for matching */
-	Node *lbl;
-	Node *load;
-	size_t nconstructors;
-	char accept;
-	char emitted;
-	char ptrwalk;
-
-	/* the decision tree step */
-	Node **pat;
-	size_t npat;
-	Dtree **next;
-	size_t nnext;
-	Dtree *any;
-
-	/* captured variables and action */
-	Node **cap;
-	size_t ncap;
-};
-
-Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
+Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl, int startid);
+Dtree *gendtree2(Node *m, Node *val, Node **lbl, size_t nlbl, int startid);
 static int addpat(Node *pat, Node *val,
 		Dtree *start, Dtree *accept,
 		Node ***cap, size_t *ncap,
 		Dtree ***end, size_t *nend);
 void dtreedump(FILE *fd, Dtree *dt);
 
+
+static int ndtree;
 
 static Node *
 utag(Node *n)
@@ -153,7 +132,6 @@ addcapture(Node *n, Node **cap, size_t ncap)
 static Dtree *
 mkdtree(Srcloc loc, Node *lbl)
 {
-	static int ndtree;
 	Dtree *t;
 
 	t = zalloc(sizeof(Dtree));
@@ -693,12 +671,14 @@ addpat(Node *pat, Node *val, Dtree *start, Dtree *accept, Node ***cap, size_t *n
 
 /* val must be a pure, fully evaluated value */
 Dtree *
-gendtree(Node *m, Node *val, Node **lbl, size_t nlbl)
+gendtree(Node *m, Node *val, Node **lbl, size_t nlbl, int startid)
 {
 	Dtree *start, *accept, **end;
 	Node **pat, **cap;
 	size_t npat, ncap, nend;
 	size_t i;
+
+	ndtree = startid;
 
 	pat = m->matchstmt.matches;
 	npat = m->matchstmt.nmatches;
@@ -807,7 +787,7 @@ genmatch(Node *m, Node *val, Node ***out, size_t *nout)
 
 
 	endlbl = genlbl(m->loc);
-	dt = gendtree(m, val, lbl, nlbl);
+	dt = gendtree2(m, val, lbl, nlbl, ndtree);
 	genmatchcode(dt, out, nout);
 
 	for (i = 0; i < npat; i++) {
@@ -867,5 +847,372 @@ void
 dtreedump(FILE *fd, Dtree *dt)
 {
 	dtreedumpnode(fd, dt, 0);
+}
+
+// The instances of the struct are immutable.
+typedef struct Frontier {
+	int i;
+	Node *lbl;
+	Node **pat;
+	size_t npat;
+	Node **load;
+	size_t nload;
+	Node **cap;
+	size_t ncap;
+} Frontier;
+
+static void
+addrec(Frontier *fs, Node *val, Node *pat)
+{
+	size_t i, n;
+	Type *ty, *mty;
+	Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *asn, *deref;
+	Ucon *uc;
+	char *s;
+
+	pat = fold(pat, 1);
+	switch (exprop(pat)) {
+	case Ogap:
+		lappend(&fs->pat, &fs->npat, pat);
+		lappend(&fs->load, &fs->nload, val);
+		break;
+	case Ovar:
+		dcl = decls[pat->expr.did];
+		if (dcl->decl.isconst) {
+			ty = decltype(dcl);
+			if (ty->type == Tyfunc || ty->type == Tycode || ty->type == Tyvalist) {
+				fatal(dcl, "bad pattern %s:%s: unmatchable type", declname(dcl), tystr(ty));
+			}
+			if (!dcl->decl.init) {
+				fatal(dcl, "bad pattern %s:%s: missing initializer", declname(dcl), tystr(ty));
+			}
+			addrec(fs, val, dcl->decl.init);
+		} else {
+			asn = mkexpr(pat->loc, Oasn, pat, val, NULL);
+			asn->expr.type = exprtype(pat);
+			lappend(&fs->pat, &fs->npat, pat);
+			lappend(&fs->load, &fs->nload, val);
+			lappend(&fs->cap, &fs->ncap, asn);
+		}
+		break;
+	case Olit:
+		if (pat->expr.args[0]->lit.littype == Lstr) {
+			lit = pat->expr.args[0];
+			n = lit->lit.strval.len;
+			s = lit->lit.strval.buf;
+
+			ty = mktype(pat->loc, Tyuint64);
+			p = mkintlit(lit->loc, n);
+			p ->expr.type = ty;
+			v = structmemb(val, mkname(pat->loc, "len"), ty);
+
+			addrec(fs, v, p);
+
+			ty = mktype(pat->loc, Tybyte);
+			for (i = 0; i < n; i++) {
+				p = mkintlit(lit->loc, s[i]);
+				p->expr.type = ty;
+				v = arrayelt(val, i);
+				addrec(fs, v, p);
+			}
+
+		} else {
+			lappend(&fs->pat, &fs->npat, pat);
+			lappend(&fs->load, &fs->nload, val);
+		}
+		break;
+	case Oaddr:
+		deref = mkexpr(val->loc, Oderef, val, NULL);
+		deref->expr.type = exprtype(pat->expr.args[0]);
+		addrec(fs, deref, pat->expr.args[0]);
+		break;
+	case Oucon:
+		uc = finducon(tybase(exprtype(pat)), pat->expr.args[0]);
+		tagid = mkintlit(pat->loc, uc->id);
+		tagid->expr.type = mktype(pat->loc, Tyint32);
+		addrec(fs, utag(val), tagid);
+		if (uc->etype) {
+			addrec(fs, uvalue(val, uc->etype), pat->expr.args[1]);
+		}
+		break;
+	case Otup:
+		for (i = 0; i < pat->expr.nargs; i++) {
+			addrec(fs, tupelt(val, i), pat->expr.args[i]);
+		}
+		break;
+	case Oarr:
+		for (i = 0; i < pat->expr.nargs; i++) {
+			addrec(fs, arrayelt(val, i), pat->expr.args[i]);
+		}
+		break;
+	case Ostruct:
+		ty = tybase(exprtype(pat));
+		for (i = 0; i < ty->nmemb; i++) {
+			mty = decltype(ty->sdecls[i]);
+			name = ty->sdecls[i]->decl.name;
+			memb = findmemb(pat, name);
+			if (!memb) {
+				memb = mkexpr(ty->sdecls[i]->loc, Ogap, NULL);
+				memb->expr.type = mty;
+			}
+			addrec(fs, structmemb(val, name, mty), memb);
+		}
+		break;
+	default:
+		fatal(pat, "unsupported pattern %s of type %s", opstr[exprop(pat)], tystr(exprtype(pat)));
+		break;
+	}
+}
+
+static void
+genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t *nfrontier)
+{
+	Frontier *fs;
+
+	fs = zalloc(sizeof(Frontier));
+	fs->i = i;
+	fs->lbl = lbl;
+	addrec(fs, val, pat);
+	lappend(frontier, nfrontier, fs);
+}
+
+static Frontier *
+project(Node *pat, Node *val, Frontier *fs)
+{
+	size_t i, cursor;
+	//Node *pi;
+	Node *c;
+	Node **_pat, **_load;
+	size_t _npat, _nload;
+	Frontier *_fs;
+
+	assert (fs->npat == fs->nload);
+
+	// select the current frontier when the sub-term val does not present in the frontier fs
+	//pi = NULL;
+	c = NULL;
+	cursor = -1;
+	for (i = 0; i < fs->npat; i++) {
+		if (val == fs->load[i]) {
+			//pi = val;
+			c = fs->pat[i];
+			cursor = i;
+			break;
+		}
+	}
+
+	// if the sub-term pi is not in the frontier,
+	// then we do not reduce the frontier.
+	if (cursor == -1) {
+		return fs;
+	}
+
+	switch (exprop(c)) {
+	case Ovar:
+	case Ogap:
+		// if the pattern at the sub-term pi of this frontier is not a constructor,
+		// then we do not reduce the frontier.
+		return fs;
+	default:
+		break;
+	}
+
+	// if constructor at the sub-term pi is not the constructor we want to project,
+	// then return null.
+	if (pat != c) {
+		return NULL;
+	}
+
+	// Duplicate the pat and load lists
+	_pat = _load = NULL;
+	_npat = _nload = 0;
+	lcat(&_pat, &_npat, fs->pat, fs->npat);
+	lcat(&_load, &_nload, fs->load, fs->nload);
+
+	ldel(&_pat, &_npat, cursor);
+	ldel(&_load, &_nload, cursor);
+
+
+	switch (exprop(c)) {
+	case Ovar:
+	case Ogap:
+		break;
+	case Olit:
+		break;
+	default:
+		break;
+	}
+
+	_fs = zalloc(sizeof(Frontier));
+	_fs->i = fs->i;
+	_fs->lbl = fs->lbl;
+	_fs->pat = _pat;
+	_fs->npat = _npat;
+	_fs->load = _load;
+	_fs->nload = _nload;
+
+	return _fs;
+}
+
+static Dtree *
+compile(Frontier **frontier, size_t nfrontier)
+{
+	size_t i, j, k;
+	Dtree *dt, *_dt, **edge, *any;
+	Frontier *fs, *_fs, **_frontier, **defaults ;
+	Node **cs, *p, *pat, *pi, **_pat;
+	size_t ncs, ncons, _nfrontier, nedge, ndefaults, _npat;
+
+
+	assert(nfrontier > 0);
+
+	fs = frontier[0];
+
+	assert(fs->npat == fs->nload);
+
+	ncons = 0;
+	for (i = 0; i < fs->npat; i++) {
+		switch (exprop(fs->pat[i])) {
+		case Ovar:
+		case Ogap:
+			break;
+		default:
+			ncons++;
+		}
+	}
+	if (ncons == 0) {
+		dt = mkdtree(fs->lbl->loc, fs->lbl);
+		dt->accept = 1;
+		return dt;
+	}
+
+	assert(fs->nload > 0);
+
+	// always select the first found constructor
+	for (i = 0; i < fs->npat; i++) {
+		switch (exprop(fs->pat[i])) {
+		case Ovar:
+		case Ogap:
+			continue;
+		default:
+			pi = fs->load[i];
+			pat = fs->pat[i];
+			goto pi_found;
+		}
+	}
+
+pi_found:
+	// when the input frontiers have any constructor
+	// collect all constructors of the same path in all frontiers {(i,f)} to CS
+
+	cs = NULL;
+	ncs = 0;
+	for (i = 0; i < nfrontier; i++) {
+		fs = frontier[i];
+		for (j = 0; j < fs->npat; j++) {
+			p = fs->pat[j];
+			switch (exprop(p)) {
+			case Ovar:
+			case Ogap:
+				break;
+			default:
+				if (fs->load[j] == pi) {
+					lappend(&cs, &ncs, p);
+				}
+			}
+		}
+	}
+
+	// compile the edges
+	edge = NULL;
+	nedge = 0;
+	_pat = NULL;
+	_npat = 0;
+	for (i = 0; i < ncs; i++) {
+		_frontier = NULL;
+		_nfrontier = 0;
+		for (j = 0; j < nfrontier; j++) {
+			fs = frontier[j];
+			_fs = project(cs[i], pi, fs);
+			if (_fs != NULL) {
+				lappend(&_frontier, &_nfrontier, _fs);
+			}
+		}
+
+		if (_nfrontier > 0) {
+			dt = compile(_frontier, _nfrontier);
+			lappend(&edge, &nedge, dt);
+			lappend(&_pat, &_npat, cs[i]);
+
+		}
+	}
+
+	// compile the defaults
+	defaults = NULL;
+	ndefaults = 0;
+	for (i = 0; i < nfrontier; i++) {
+		fs = frontier[i];
+		k = -1;
+		for (j = 0; j < fs->npat; j++) {
+			p = fs->pat[j];
+			// locate the occurrence of pi in fs
+			if (pi == fs->load[j]) {
+				k = j;
+			}
+		}
+
+		if (k == -1 || exprop(fs->pat[k]) == Ovar || exprop(fs->pat[k]) == Ogap) {
+			lappend(&defaults, &ndefaults, fs);
+		}
+	}
+	if (ndefaults) {
+		any = compile(defaults, ndefaults);
+	} else {
+		any = NULL;
+	}
+
+
+	// construct the result dtree
+	_dt = mkdtree(pat->loc, genlbl(pat->loc));
+	_dt->load = pi;
+	_dt->npat = _npat,
+	_dt->pat = _pat,
+	_dt->nnext = nedge;
+	_dt->next = edge;
+	_dt->any = any;
+	return _dt;
+}
+
+
+Dtree *
+gendtree2(Node *m, Node *val, Node **lbl, size_t nlbl, int startid)
+{
+	Dtree *root;
+	Node **pat;
+	size_t npat;
+	size_t i;
+	Frontier **frontier;
+	size_t nfrontier;
+
+
+	ndtree = startid;
+
+	pat = m->matchstmt.matches;
+	npat = m->matchstmt.nmatches;
+
+	frontier = NULL;
+	nfrontier = 0;
+	for (i = 0; i < npat; i++) {
+		genfrontier(i, val, pat[i]->match.pat, lbl[i], &frontier, &nfrontier);
+	}
+	for (i = 0; i < nfrontier; i++) {
+		addcapture(pat[i]->match.block, frontier[i]->cap, frontier[i]->ncap);
+	}
+	root = compile(frontier, nfrontier);
+
+	if (debugopt['M'])
+		dtreedump(stdout, root);
+
+	return root;
 }
 
