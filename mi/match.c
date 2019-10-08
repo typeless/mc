@@ -887,6 +887,38 @@ newpath(Path *p, char c)
 	return newp;
 }
 
+static int
+patheq(Path *a, Path *b)
+{
+	unsigned char i;
+
+	if (a->len != b->len) {
+		return 0;
+	}
+	for (i = 0; i < a->len; i++) {
+		if (a->p[i] != b->p[i]) {
+			return 0;
+		}
+	}
+	return 1;
+}
+
+//static Node *
+//pathload(Node *val, Path *p)
+//{
+//	return val;
+//}
+
+static void
+pathdump(Path *p, FILE *out)
+{
+	size_t i;
+	for (i = 0; i < p->len; i++) {
+		fprintf(out, "%x,", p->p[i]);
+	}
+	fprintf(out, "\n");
+}
+
 static void
 addrec(Frontier *fs, Node *val, Node *pat, Path *path)
 {
@@ -1006,13 +1038,14 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 }
 
 static Frontier *
-project(Node *pat, Node *val, Frontier *fs)
+project(Node *pat, Path *pi, Frontier *fs)
 {
 	size_t i, cursor;
 	//Node *pi;
 	Node *c;
 	Node **_pat, **_load;
-	size_t _npat, _nload;
+	Path **_path;
+	size_t _npat, _nload, _npath;
 	Frontier *_fs;
 
 	assert (fs->npat == fs->nload);
@@ -1022,7 +1055,7 @@ project(Node *pat, Node *val, Frontier *fs)
 	c = NULL;
 	cursor = -1;
 	for (i = 0; i < fs->npat; i++) {
-		if (val == fs->load[i]) {
+		if (patheq(pi, fs->path[i])) {
 			//pi = val;
 			c = fs->pat[i];
 			cursor = i;
@@ -1053,10 +1086,16 @@ project(Node *pat, Node *val, Frontier *fs)
 	}
 
 	// Duplicate the pat and load lists
-	_pat = _load = NULL;
-	_npat = _nload = 0;
+	_pat = NULL;
+	_npat = 0;
+	_load = NULL;
+	_nload = 0;
+	_path = NULL;
+	_npath = 0;
+
 	lcat(&_pat, &_npat, fs->pat, fs->npat);
 	lcat(&_load, &_nload, fs->load, fs->nload);
+	lcat(&_path, &_npath, fs->path, fs->npath);
 
 	ldel(&_pat, &_npat, cursor);
 	ldel(&_load, &_nload, cursor);
@@ -1079,6 +1118,8 @@ project(Node *pat, Node *val, Frontier *fs)
 	_fs->npat = _npat;
 	_fs->load = _load;
 	_fs->nload = _nload;
+	_fs->path = _path;
+	_fs->npath = _npath;
 
 	return _fs;
 }
@@ -1089,7 +1130,8 @@ compile(Frontier **frontier, size_t nfrontier)
 	size_t i, j, k;
 	Dtree *dt, *_dt, **edge, *any;
 	Frontier *fs, *_fs, **_frontier, **defaults ;
-	Node **cs, *p, *pat, *pi, **_pat;
+	Node **cs, *p, *pat, **_pat;
+	Path *pi;
 	size_t ncs, ncons, _nfrontier, nedge, ndefaults, _npat;
 
 
@@ -1124,7 +1166,7 @@ compile(Frontier **frontier, size_t nfrontier)
 		case Ogap:
 			continue;
 		default:
-			pi = fs->load[i];
+			pi = fs->path[i];
 			pat = fs->pat[i];
 			goto pi_found;
 		}
@@ -1143,7 +1185,7 @@ pi_found:
 			case Ogap:
 				break;
 			default:
-				if (fs->load[j] == pi) {
+				if (patheq(pi, fs->path[j])) {
 					lappend(&cs, &ncs, p);
 				}
 			}
@@ -1183,7 +1225,7 @@ pi_found:
 		for (j = 0; j < fs->npat; j++) {
 			p = fs->pat[j];
 			// locate the occurrence of pi in fs
-			if (pi == fs->load[j]) {
+			if (patheq(pi, fs->path[j])) {
 				k = j;
 			}
 		}
@@ -1201,7 +1243,7 @@ pi_found:
 
 	// construct the result dtree
 	_dt = mkdtree(pat->loc, genlbl(pat->loc));
-	_dt->load = pi;
+	//_dt->load = pi;
 	_dt->npat = _npat,
 	_dt->pat = _pat,
 	_dt->nnext = nedge;
