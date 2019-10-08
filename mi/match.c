@@ -1130,7 +1130,7 @@ compile(Frontier **frontier, size_t nfrontier)
 	size_t i, j, k;
 	Dtree *dt, *_dt, **edge, *any;
 	Frontier *fs, *_fs, **_frontier, **defaults ;
-	Node **cs, *p, *pat, **_pat;
+	Node **cs, *p, *pat, **_pat, *load;
 	Path *pi;
 	size_t ncs, ncons, _nfrontier, nedge, ndefaults, _npat;
 
@@ -1168,6 +1168,7 @@ compile(Frontier **frontier, size_t nfrontier)
 		default:
 			pi = fs->path[i];
 			pat = fs->pat[i];
+			load = fs->load[i];
 			goto pi_found;
 		}
 	}
@@ -1243,7 +1244,7 @@ pi_found:
 
 	// construct the result dtree
 	_dt = mkdtree(pat->loc, genlbl(pat->loc));
-	//_dt->load = pi;
+	_dt->load = load;
 	_dt->npat = _npat,
 	_dt->pat = _pat,
 	_dt->nnext = nedge;
