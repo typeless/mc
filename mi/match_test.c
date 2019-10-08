@@ -453,10 +453,6 @@ main(int argc, char **argv)
 			.dt = &(Dtree){
 				.id = 0,
 				.accept = 1,
-				.ncap = 1,
-				.cap = (Node*[]){
-					ty(mkexpr(Zloc, Oasn, P(0), T, NULL), exprtype(P(0))),
-				}
 			},
 
 			//.dt = &(Dtree){
@@ -890,6 +886,38 @@ main(int argc, char **argv)
 			//	},
 			//},
 		},
+		{
+			.name = "3-tuple-3-pat",
+			.val = ({t = gentemp(Zloc, _int32t3, NULL);}),
+			.pats = (Node *[]){
+				/**
+				 * | (123, 456):
+				 */
+				__P0(ty(mkexpr(Zloc, Otup,
+					     ty(mkexpr(Zloc, Olit, mkint(Zloc, 101), NULL), _int32),
+					     ty(mkexpr(Zloc, Olit, mkint(Zloc, 102), NULL), _int32),
+					     ty(mkexpr(Zloc, Olit, mkint(Zloc, 103), NULL), _int32),
+					     NULL), _int32t3)),
+				__P1(ty(mkexpr(Zloc, Otup,
+					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 101), NULL), _int32),
+					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 202), NULL), _int32),
+					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 203), NULL), _int32),
+					       NULL), _int32t3)),
+				__P2(ty(mkexpr(Zloc, Otup,
+					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 301), NULL), _int32),
+					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 302), NULL), _int32),
+					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 303), NULL), _int32),
+					       NULL), _int32t3)),
+
+				/**
+				 * | (_, _):
+				 */
+				__P_(ty(mkexpr(Zloc, Ogap, NULL), _int32t3)),
+				NULL,
+			},
+			.dt = &(Dtree){
+			},
+		},
 
 		{
 			.name = "1-int32-struct",
@@ -1319,6 +1347,22 @@ main(int argc, char **argv)
 				},
 			},
 		},
+		{
+			.name = "strings",
+			.val = gentemp(Zloc, _bug002s, NULL),
+			.pats = (Node*[]){
+				__P0(ty(mkexprl(Zloc, Ostruct, (Node*[]){
+					mkidxinit(Zloc, mkname(Zloc, "s2_ufoo"),
+						  ty(mkexpr(Zloc, Oucon, mkname(Zloc, "Foo"),
+							    mkintlit(Zloc, 123), NULL), _int32u1)
+						 )}, 1), _bug002s)),
+				__P_(ty(mkexpr(Zloc, Ogap, NULL), _bug002s)),
+				NULL,
+			},
+			.dt = &(Dtree){
+			},
+		},
+
 		{
 			.name = "bug1",
 			.val = gentemp(Zloc, _bug002s, NULL),
