@@ -849,6 +849,12 @@ dtreedump(FILE *fd, Dtree *dt)
 	dtreedumpnode(fd, dt, 0);
 }
 
+
+typedef struct Path {
+	unsigned char len;
+	unsigned char *p;
+} Path;
+
 // The instances of the struct are immutable.
 typedef struct Frontier {
 	int i;
@@ -859,10 +865,30 @@ typedef struct Frontier {
 	size_t nload;
 	Node **cap;
 	size_t ncap;
+	Path **path;
+	size_t npath;
 } Frontier;
 
+static Path*
+newpath(Path *p, char c)
+{
+	Path *newp;
+
+	newp = zalloc(sizeof(Path));
+	if (p) {
+		newp->p = memdup(p->p, p->len+1);
+		newp->p[p->len] = c;
+		newp->len = p->len+1;
+	} else {
+		newp->p = zalloc(1);
+		newp->p[0] = 0;
+		newp->len = 1;
+	}
+	return newp;
+}
+
 static void
-addrec(Frontier *fs, Node *val, Node *pat)
+addrec(Frontier *fs, Node *val, Node *pat, Path *path)
 {
 	size_t i, n;
 	Type *ty, *mty;
@@ -875,6 +901,7 @@ addrec(Frontier *fs, Node *val, Node *pat)
 	case Ogap:
 		lappend(&fs->pat, &fs->npat, pat);
 		lappend(&fs->load, &fs->nload, val);
+		lappend(&fs->path, &fs->npath, path);
 		break;
 	case Ovar:
 		dcl = decls[pat->expr.did];
@@ -886,13 +913,14 @@ addrec(Frontier *fs, Node *val, Node *pat)
 			if (!dcl->decl.init) {
 				fatal(dcl, "bad pattern %s:%s: missing initializer", declname(dcl), tystr(ty));
 			}
-			addrec(fs, val, dcl->decl.init);
+			addrec(fs, val, dcl->decl.init, newpath(path, 0));
 		} else {
 			asn = mkexpr(pat->loc, Oasn, pat, val, NULL);
 			asn->expr.type = exprtype(pat);
 			lappend(&fs->pat, &fs->npat, pat);
 			lappend(&fs->load, &fs->nload, val);
 			lappend(&fs->cap, &fs->ncap, asn);
+			lappend(&fs->path, &fs->npath, path);
 		}
 		break;
 	case Olit:
@@ -906,43 +934,44 @@ addrec(Frontier *fs, Node *val, Node *pat)
 			p ->expr.type = ty;
 			v = structmemb(val, mkname(pat->loc, "len"), ty);
 
-			addrec(fs, v, p);
+			addrec(fs, v, p, newpath(path, 0));
 
 			ty = mktype(pat->loc, Tybyte);
 			for (i = 0; i < n; i++) {
 				p = mkintlit(lit->loc, s[i]);
 				p->expr.type = ty;
 				v = arrayelt(val, i);
-				addrec(fs, v, p);
+				addrec(fs, v, p, newpath(path, 1+i));
 			}
 
 		} else {
 			lappend(&fs->pat, &fs->npat, pat);
 			lappend(&fs->load, &fs->nload, val);
+			lappend(&fs->path, &fs->npath, path);
 		}
 		break;
 	case Oaddr:
 		deref = mkexpr(val->loc, Oderef, val, NULL);
 		deref->expr.type = exprtype(pat->expr.args[0]);
-		addrec(fs, deref, pat->expr.args[0]);
+		addrec(fs, deref, pat->expr.args[0], newpath(path, 0));
 		break;
 	case Oucon:
 		uc = finducon(tybase(exprtype(pat)), pat->expr.args[0]);
 		tagid = mkintlit(pat->loc, uc->id);
 		tagid->expr.type = mktype(pat->loc, Tyint32);
-		addrec(fs, utag(val), tagid);
+		addrec(fs, utag(val), tagid, newpath(path, 0));
 		if (uc->etype) {
-			addrec(fs, uvalue(val, uc->etype), pat->expr.args[1]);
+			addrec(fs, uvalue(val, uc->etype), pat->expr.args[1], newpath(path, 1));
 		}
 		break;
 	case Otup:
 		for (i = 0; i < pat->expr.nargs; i++) {
-			addrec(fs, tupelt(val, i), pat->expr.args[i]);
+			addrec(fs, tupelt(val, i), pat->expr.args[i], newpath(path, i));
 		}
 		break;
 	case Oarr:
 		for (i = 0; i < pat->expr.nargs; i++) {
-			addrec(fs, arrayelt(val, i), pat->expr.args[i]);
+			addrec(fs, arrayelt(val, i), pat->expr.args[i], newpath(path, i));
 		}
 		break;
 	case Ostruct:
@@ -955,7 +984,7 @@ addrec(Frontier *fs, Node *val, Node *pat)
 				memb = mkexpr(ty->sdecls[i]->loc, Ogap, NULL);
 				memb->expr.type = mty;
 			}
-			addrec(fs, structmemb(val, name, mty), memb);
+			addrec(fs, structmemb(val, name, mty), memb, newpath(path, i));
 		}
 		break;
 	default:
@@ -972,7 +1001,7 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 	fs = zalloc(sizeof(Frontier));
 	fs->i = i;
 	fs->lbl = lbl;
-	addrec(fs, val, pat);
+	addrec(fs, val, pat, newpath(NULL, 0));
 	lappend(frontier, nfrontier, fs);
 }
 
@@ -1102,9 +1131,7 @@ compile(Frontier **frontier, size_t nfrontier)
 	}
 
 pi_found:
-	// when the input frontiers have any constructor
-	// collect all constructors of the same path in all frontiers {(i,f)} to CS
-
+	// compute constructors at pi fron the frontiers
 	cs = NULL;
 	ncs = 0;
 	for (i = 0; i < nfrontier; i++) {
