@@ -1055,6 +1055,8 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 	lappend(frontier, nfrontier, fs);
 }
 
+// project updates the input frontier by altering the set of slots.
+// It would updates the input frontier object but it should not modify the set of slots referenced by other frontier objects.
 static Frontier *
 project(Node *pat, Path *pi, Node *val, Frontier *fs)
 {
@@ -1064,7 +1066,6 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	Ucon *uc;
 	char *s;
 	size_t i, n, nslot;
-	Frontier *_fs;
 
 	assert (fs->nslot > 0);
 
@@ -1148,26 +1149,26 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	case Oaddr:
 		deref = mkexpr(val->loc, Oderef, val, NULL);
 		deref->expr.type = exprtype(pat->expr.args[0]);
-		lappend(&slot, &nslot, newslot(newpath(pi, 0), pat->expr.args[0], deref));
+		fs = project(pat->expr.args[0], newpath(pi, 0), deref, fs);
 		break;
 	case Oucon:
 		uc = finducon(tybase(exprtype(pat)), pat->expr.args[0]);
 		tagid = mkintlit(pat->loc, uc->id);
 		tagid->expr.type = mktype(pat->loc, Tyint32);
 
-		lappend(&slot, &nslot, newslot(newpath(pi, 0), tagid, utag(val)));
+		fs = project(tagid, newpath(pi, 0), utag(val), fs);
 		if (uc->etype) {
-			lappend(&slot, &nslot, newslot(newpath(pi, 1), pat->expr.args[1], uvalue(val, uc->etype)));
+			fs = project(pat->expr.args[1], newpath(pi, 1), uvalue(val, uc->etype), fs);
 		}
 		break;
 	case Otup:
 		for (i = 0; i < pat->expr.nargs; i++) {
-			lappend(&slot, &nslot, newslot(newpath(pi, i), pat->expr.args[i], tupelt(val, i)));
+			fs = project(pat->expr.args[i], newpath(pi, i), tupelt(val, i), fs);
 		}
 		break;
 	case Oarr:
 		for (i = 0; i < pat->expr.nargs; i++) {
-			lappend(&slot, &nslot, newslot(newpath(pi, i), pat->expr.args[i], arrayelt(val, i)));
+			fs = project(pat->expr.args[i], newpath(pi, i), arrayelt(val, i), fs);
 		}
 		break;
 	case Ostruct:
@@ -1180,19 +1181,16 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 				memb = mkexpr(ty->sdecls[i]->loc, Ogap, NULL);
 				memb->expr.type = mty;
 			}
-			lappend(&slot, &nslot, newslot(newpath(pi, i), memb, structmemb(val, name, mty)));
+			fs = project(memb, newpath(pi, i), structmemb(val, name, mty), fs);
 		}
 		break;
 	default:
 		break;
 	}
 
-	_fs = zalloc(sizeof(Frontier));
-	_fs->i = fs->i;
-	_fs->lbl = fs->lbl;
-	_fs->nslot = nslot;
-	_fs->slot = slot;
-	return _fs;
+	fs->slot = slot;
+	fs->nslot = nslot;
+	return fs;
 }
 
 static Dtree *
@@ -1205,11 +1203,12 @@ compile(Frontier **frontier, size_t nfrontier)
 	Slot *slot, *s;
 	size_t ncs, ncons, _nfrontier, nedge, ndefaults, _npat;
 
-
+	fprintf(stderr, "%s:%u\n", __func__, __LINE__);
 	assert(nfrontier > 0);
 
 	fs = frontier[0];
 
+	// scan constructors horizontally
 	ncons = 0;
 	for (i = 0; i < fs->nslot; i++) {
 		switch (exprop(fs->slot[i]->pat)) {
@@ -1223,6 +1222,7 @@ compile(Frontier **frontier, size_t nfrontier)
 	if (ncons == 0) {
 		dt = mkdtree(fs->lbl->loc, fs->lbl);
 		dt->accept = 1;
+		fprintf(stderr, "%s:%u\n", __func__, __LINE__);
 		return dt;
 	}
 
@@ -1241,7 +1241,7 @@ compile(Frontier **frontier, size_t nfrontier)
 	}
 
 pi_found:
-	// compute constructors at pi fron the frontiers
+	// scan constructors vertically at pi to create the set 'CS'
 	cs = NULL;
 	ncs = 0;
 	for (i = 0; i < nfrontier; i++) {
@@ -1253,7 +1253,7 @@ pi_found:
 			case Ogap:
 				break;
 			default:
-				if (patheq(slot->path, fs->slot[j]->path)) {
+				if (patheq(slot->path, s->path)) {
 					lappend(&cs, &ncs, s->pat);
 				}
 			}
@@ -1261,27 +1261,36 @@ pi_found:
 	}
 
 	// compile the edges
+	_frontier = NULL;
+	_nfrontier = 0;
+	for (i = 0; i < ncs; i++) {
+		for (j = 0; j < nfrontier; j++) {
+			// duplicate the frontier
+			fs = frontier[j];
+			_fs = zalloc(sizeof(Frontier));
+			_fs->i = fs->i;
+			_fs->lbl = fs->lbl;
+			_fs->slot = fs->slot;
+			_fs->nslot = fs->nslot;
+			_fs->cap = fs->cap;
+			_fs->ncap = fs->ncap;
+
+			_fs = project(cs[i], slot->path, slot->load, _fs);
+			if (_fs != NULL) {
+				lappend(&_frontier, &_nfrontier, _fs);
+			}
+		}
+	}
+
 	edge = NULL;
 	nedge = 0;
 	_pat = NULL;
 	_npat = 0;
 	for (i = 0; i < ncs; i++) {
-		_frontier = NULL;
-		_nfrontier = 0;
-		for (j = 0; j < nfrontier; j++) {
-			fs = frontier[j];
-			_fs = project(cs[i], slot->path, slot->load, fs);
-			if (_fs != NULL) {
-				lappend(&_frontier, &_nfrontier, _fs);
-			}
-		}
-
-		if (_nfrontier > 0) {
-			dt = compile(_frontier, _nfrontier);
-			lappend(&edge, &nedge, dt);
-			lappend(&_pat, &_npat, cs[i]);
-
-		}
+		fprintf(stderr, "%s:%u\n", __func__, __LINE__);
+		dt = compile(_frontier, _nfrontier);
+		lappend(&edge, &nedge, dt);
+		lappend(&_pat, &_npat, cs[i]);
 	}
 
 	// compile the defaults
@@ -1302,6 +1311,7 @@ pi_found:
 		}
 	}
 	if (ndefaults) {
+		fprintf(stderr, "%s:%u ndefsults:%ld\n", __func__, __LINE__, ndefaults);
 		any = compile(defaults, ndefaults);
 	} else {
 		any = NULL;
