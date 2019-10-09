@@ -1423,6 +1423,7 @@ main(int argc, char **argv)
 			continue;
 		}
 		initfile(&file, errorf("(test-%d-%s)", i, name));
+		fprintf(stderr, "[%03lu]------ %s ##\n", i, name);
 		err = test_match(i, t->val, t->pats, t->dt);
 		if (err) {
 			fprintf(stderr, "FAILED id: %ld name: %s\n", i, name);

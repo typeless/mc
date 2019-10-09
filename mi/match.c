@@ -874,6 +874,7 @@ newslot(Path *path, Node *pat, Node *val)
 	s->path = path;
 	s->pat = pat;
 	s->load = val;
+	assert(exprop(pat) != Ovar);
 	return s;
 }
 
@@ -1344,13 +1345,13 @@ pi_found:
 	}
 	// construct the result dtree
 	_dt = mkdtree(slot->pat->loc, genlbl(slot->pat->loc));
-	_dt->accept = (nedge == 0);
 	_dt->load = slot->load;
 	_dt->npat = _npat,
 	_dt->pat = _pat,
 	_dt->nnext = nedge;
 	_dt->next = edge;
 	_dt->any = any;
+
 	return _dt;
 }
 
