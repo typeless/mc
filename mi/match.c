@@ -863,15 +863,17 @@ typedef struct Path {
 typedef struct Slot {
 	Path *path;
 	Node *pat;
+	Node *load;
 } Slot;
 
-static void
-newslot(Path *path, Node *pat)
+static Slot *
+newslot(Path *path, Node *pat, Node *val)
 {
 	Slot *s;
 	s = zalloc(sizeof(Slot));
 	s->path = path;
 	s->pat = pat;
+	s->load = val;
 	return s;
 }
 
@@ -1055,19 +1057,19 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 	fs = zalloc(sizeof(Frontier));
 	fs->i = i;
 	fs->lbl = lbl;
-	lappend(&fs->slot, &fs->nslot, newslot(newpath(NULL, 0), pat));
+	lappend(&fs->slot, &fs->nslot, newslot(newpath(NULL, 0), pat, val));
 	lappend(frontier, nfrontier, fs);
 }
 
 static Frontier *
-project(Node *pat, Path *pi, Frontier *fs)
+project(Node *pat, Path *pi, Node *val, Frontier *fs)
 {
+	Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *deref;
 	Type *ty, *mty;
-	Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *asn, *deref;
+	Slot *cursor, **slot;
 	Ucon *uc;
-
-	size_t i, nslot;
-	Slot *cursor, *slot;
+	char *s;
+	size_t i, n, nslot;
 	Frontier *_fs;
 
 	assert (fs->nslot > 0);
@@ -1075,6 +1077,7 @@ project(Node *pat, Path *pi, Frontier *fs)
 	// select the current frontier when the sub-term val does not present in the frontier fs
 	cursor  = NULL;
 	slot = NULL;
+	nslot = 0;
 	for (i = 0; i < fs->nslot; i++) {
 		if (patheq(pi, fs->slot[i]->path)) {
 			cursor = fs->slot[i];
@@ -1099,6 +1102,7 @@ project(Node *pat, Path *pi, Frontier *fs)
 		break;
 	}
 
+	//TODO FIXME
 	// if constructor at the pi is not the constructor we want to project,
 	// then return null.
 	if (pat != cursor->pat) {
@@ -1106,29 +1110,66 @@ project(Node *pat, Path *pi, Frontier *fs)
 	}
 
 	switch (exprop(cursor->pat)) {
-	case Ovar:
 	case Ogap:
 		break;
+	case Ovar:
+		dcl = decls[pat->expr.did];
+		if (dcl->decl.isconst) {
+			ty = decltype(dcl);
+			if (ty->type == Tyfunc || ty->type == Tycode || ty->type == Tyvalist) {
+				fatal(dcl, "bad pattern %s:%s: unmatchable type", declname(dcl), tystr(ty));
+			}
+			if (!dcl->decl.init) {
+				fatal(dcl, "bad pattern %s:%s: missing initializer", declname(dcl), tystr(ty));
+			}
+			lappend(&slot, &nslot, newslot(newpath(pi, 0), dcl->decl.init, val));
+		}
+		break;
 	case Olit:
+		if (pat->expr.args[0]->lit.littype == Lstr) {
+			lit = pat->expr.args[0];
+			n = lit->lit.strval.len;
+			s = lit->lit.strval.buf;
+
+			ty = mktype(pat->loc, Tyuint64);
+			p = mkintlit(lit->loc, n);
+			p ->expr.type = ty;
+			v = structmemb(val, mkname(pat->loc, "len"), ty);
+
+			lappend(&slot, &nslot, newslot(newpath(pi, 0), p, v));
+
+			ty = mktype(pat->loc, Tybyte);
+			for (i = 0; i < n; i++) {
+				p = mkintlit(lit->loc, s[i]);
+				p->expr.type = ty;
+				v = arrayelt(val, i);
+				lappend(&slot, &nslot, newslot(newpath(pi, i), p, v));
+			}
+		}
+		break;
+	case Oaddr:
+		deref = mkexpr(val->loc, Oderef, val, NULL);
+		deref->expr.type = exprtype(pat->expr.args[0]);
+		lappend(&slot, &nslot, newslot(newpath(pi, 0), pat->expr.args[0], deref));
 		break;
 	case Oucon:
 		uc = finducon(tybase(exprtype(pat)), pat->expr.args[0]);
 		tagid = mkintlit(pat->loc, uc->id);
 		tagid->expr.type = mktype(pat->loc, Tyint32);
 
-		lappend(&_pat, &_npat, tagid);
-		lappend(&_path, &_npath, newpath(pi, 0));
-		//addrec(fs, utag(val), tagid, newpath(path, 0));
+		lappend(&slot, &nslot, newslot(newpath(pi, 0), tagid, utag(val)));
 		if (uc->etype) {
-			//addrec(fs, uvalue(val, uc->etype), pat->expr.args[1], newpath(path, 1));
-			lappend(&_pat, &_npat, pat->expr.args[1]);
-			lappend(&_path, &_npath, newpath(pi, 1));
+			lappend(&slot, &nslot, newslot(newpath(pi, 1), pat->expr.args[1], uvalue(val, uc->etype)));
 		}
 		break;
 	case Otup:
 		for (i = 0; i < pat->expr.nargs; i++) {
-			lappend(&_pat, &_npat, pat->expr.args[i]);
-			lappend(&_path, &_npath, newpath(pi, i));
+			lappend(&slot, &nslot, newslot(newpath(pi, i), pat->expr.args[i], tupelt(val, i)));
+		}
+		break;
+	case Oarr:
+		for (i = 0; i < pat->expr.nargs; i++) {
+			lappend(&slot, &nslot, newslot(newpath(pi, i), pat->expr.args[i], arrayelt(val, i)));
 		}
 		break;
 	case Ostruct:
@@ -1141,8 +1182,7 @@ project(Node *pat, Path *pi, Frontier *fs)
 				memb = mkexpr(ty->sdecls[i]->loc, Ogap, NULL);
 				memb->expr.type = mty;
 			}
-			lappend(&_pat, &_npat, memb);
-			lappend(&_path, &_npath, newpath(pi, i));
+			lappend(&slot, &nslot, newslot(newpath(pi, i), memb, structmemb(val, name, mty)));
 		}
 		break;
 	default:
@@ -1152,13 +1192,8 @@ project(Node *pat, Path *pi, Frontier *fs)
 	_fs = zalloc(sizeof(Frontier));
 	_fs->i = fs->i;
 	_fs->lbl = fs->lbl;
-	_fs->pat = _pat;
-	_fs->npat = _npat;
-	_fs->load = _load;
-	_fs->nload = _nload;
-	_fs->path = _path;
-	_fs->npath = _npath;
-
+	_fs->nslot = nslot;
+	_fs->slot = slot;
 	return _fs;
 }
 
@@ -1168,8 +1203,8 @@ compile(Frontier **frontier, size_t nfrontier)
 	size_t i, j, k;
 	Dtree *dt, *_dt, **edge, *any;
 	Frontier *fs, *_fs, **_frontier, **defaults ;
-	Node **cs, *p, *pat, **_pat, *load;
-	Path *pi;
+	Node **cs, **_pat;
+	Slot *slot, *s;
 	size_t ncs, ncons, _nfrontier, nedge, ndefaults, _npat;
 
 
@@ -1177,11 +1212,9 @@ compile(Frontier **frontier, size_t nfrontier)
 
 	fs = frontier[0];
 
-	assert(fs->npat == fs->nload);
-
 	ncons = 0;
-	for (i = 0; i < fs->npat; i++) {
-		switch (exprop(fs->pat[i])) {
+	for (i = 0; i < fs->nslot; i++) {
+		switch (exprop(fs->slot[i]->pat)) {
 		case Ovar:
 		case Ogap:
 			break;
@@ -1195,18 +1228,16 @@ compile(Frontier **frontier, size_t nfrontier)
 		return dt;
 	}
 
-	assert(fs->nload > 0);
+	assert(fs->nslot > 0);
 
 	// always select the first found constructor
-	for (i = 0; i < fs->npat; i++) {
-		switch (exprop(fs->pat[i])) {
+	for (i = 0; i < fs->nslot; i++) {
+		switch (exprop(fs->slot[i]->pat)) {
 		case Ovar:
 		case Ogap:
 			continue;
 		default:
-			pi = fs->path[i];
-			pat = fs->pat[i];
-			load = fs->load[i];
+			slot = fs->slot[i];
 			goto pi_found;
 		}
 	}
@@ -1217,15 +1248,15 @@ pi_found:
 	ncs = 0;
 	for (i = 0; i < nfrontier; i++) {
 		fs = frontier[i];
-		for (j = 0; j < fs->npat; j++) {
-			p = fs->pat[j];
-			switch (exprop(p)) {
+		for (j = 0; j < fs->nslot; j++) {
+			s = fs->slot[j];
+			switch (exprop(s->pat)) {
 			case Ovar:
 			case Ogap:
 				break;
 			default:
-				if (patheq(pi, fs->path[j])) {
-					lappend(&cs, &ncs, p);
+				if (patheq(slot->path, fs->slot[j]->path)) {
+					lappend(&cs, &ncs, s->pat);
 				}
 			}
 		}
@@ -1241,7 +1272,7 @@ pi_found:
 		_nfrontier = 0;
 		for (j = 0; j < nfrontier; j++) {
 			fs = frontier[j];
-			_fs = project(cs[i], pi, fs);
+			_fs = project(cs[i], slot->path, slot->load, fs);
 			if (_fs != NULL) {
 				lappend(&_frontier, &_nfrontier, _fs);
 			}
@@ -1261,15 +1292,14 @@ pi_found:
 	for (i = 0; i < nfrontier; i++) {
 		fs = frontier[i];
 		k = -1;
-		for (j = 0; j < fs->npat; j++) {
-			p = fs->pat[j];
+		for (j = 0; j < fs->nslot; j++) {
 			// locate the occurrence of pi in fs
-			if (patheq(pi, fs->path[j])) {
+			if (patheq(slot->path, fs->slot[j]->path)) {
 				k = j;
 			}
 		}
 
-		if (k == -1 || exprop(fs->pat[k]) == Ovar || exprop(fs->pat[k]) == Ogap) {
+		if (k == -1 || exprop(fs->slot[k]->pat) == Ovar || exprop(fs->slot[j]->pat) == Ogap) {
 			lappend(&defaults, &ndefaults, fs);
 		}
 	}
@@ -1281,8 +1311,8 @@ pi_found:
 
 
 	// construct the result dtree
-	_dt = mkdtree(pat->loc, genlbl(pat->loc));
-	_dt->load = load;
+	_dt = mkdtree(slot->pat->loc, genlbl(slot->pat->loc));
+	_dt->load = slot->load;
 	_dt->npat = _npat,
 	_dt->pat = _pat,
 	_dt->nnext = nedge;
@@ -1314,7 +1344,7 @@ gendtree2(Node *m, Node *val, Node **lbl, size_t nlbl, int startid)
 		genfrontier(i, val, pat[i]->match.pat, lbl[i], &frontier, &nfrontier);
 	}
 	//for (i = 0; i < nfrontier; i++) {
-		addcapture(pat[i]->match.block, frontier[i]->cap, frontier[i]->ncap);
+	//	addcapture(pat[i]->match.block, frontier[i]->cap, frontier[i]->ncap);
 	//}
 	root = compile(frontier, nfrontier);
 
