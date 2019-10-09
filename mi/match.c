@@ -1297,7 +1297,7 @@ pi_found:
 			}
 		}
 
-		if (k == -1 || exprop(fs->slot[k]->pat) == Ovar || exprop(fs->slot[j]->pat) == Ogap) {
+		if (k == -1 || exprop(fs->slot[k]->pat) == Ovar || exprop(fs->slot[k]->pat) == Ogap) {
 			lappend(&defaults, &ndefaults, fs);
 		}
 	}
