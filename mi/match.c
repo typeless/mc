@@ -921,6 +921,20 @@ patheq(Path *a, Path *b)
 	return 1;
 }
 
+static int
+pateq(Node *a, Node *b)
+{
+	if (exprop(a) != exprop(b)) {
+		return 0;
+	}
+	switch (exprop(a)) {
+	case Olit:
+		return liteq(a->expr.args[0], b->expr.args[0]);
+	default:
+		return tyeq(exprtype(a), exprtype(b));
+	}
+}
+
 //static Node *
 //pathload(Node *val, Path *p)
 //{
@@ -1100,7 +1114,7 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	//TODO FIXME
 	// if constructor at the pi is not the constructor we want to project,
 	// then return null.
-	if (pat != c->pat) {
+	if (pateq(pat, c->pat)) {
 		return NULL;
 	}
 
@@ -1145,8 +1159,6 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 				v = arrayelt(val, i);
 				lappend(&slot, &nslot, newslot(newpath(pi, i), p, v));
 			}
-		} else {
-			lappend(&slot, &nslot, newslot(newpath(pi, 0), c->pat, val));
 		}
 		break;
 	case Oaddr:
@@ -1294,10 +1306,12 @@ pi_found:
 	nedge = 0;
 	_pat = NULL;
 	_npat = 0;
-	for (i = 0; i < ncs; i++) {
-		dt = compile(_frontier, _nfrontier);
-		lappend(&edge, &nedge, dt);
-		lappend(&_pat, &_npat, cs[i]);
+	if (_nfrontier) {
+		for (i = 0; i < ncs; i++) {
+			dt = compile(_frontier, _nfrontier);
+			lappend(&edge, &nedge, dt);
+			lappend(&_pat, &_npat, cs[i]);
+		}
 	}
 
 	// compile the defaults
@@ -1325,10 +1339,12 @@ pi_found:
 
 
 	if (nedge == 1 && any == NULL) {
+		fprintf(stderr, "[%s:%u]\n", __func__, __LINE__);
 		return edge[0];
 	}
 	// construct the result dtree
 	_dt = mkdtree(slot->pat->loc, genlbl(slot->pat->loc));
+	_dt->accept = (nedge == 0);
 	_dt->load = slot->load;
 	_dt->npat = _npat,
 	_dt->pat = _pat,
