@@ -883,14 +883,8 @@ typedef struct Frontier {
 	Node *lbl;
 	Slot  **slot;
 	size_t nslot;
-	//Node **pat;
-	//size_t npat;
-	//Node **load;
-	//size_t nload;
-	//Node **cap;
-	//size_t ncap;
-	//Path **path;
-	//size_t npath;
+	Node **cap;
+	size_t ncap;
 } Frontier;
 
 static Path*
@@ -1064,7 +1058,7 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 static Frontier *
 project(Node *pat, Path *pi, Node *val, Frontier *fs)
 {
-	Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *deref;
+	Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *deref, *asn;
 	Type *ty, *mty;
 	Slot *cursor, **slot;
 	Ucon *uc;
@@ -1123,6 +1117,10 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 				fatal(dcl, "bad pattern %s:%s: missing initializer", declname(dcl), tystr(ty));
 			}
 			lappend(&slot, &nslot, newslot(newpath(pi, 0), dcl->decl.init, val));
+		} else {
+			asn = mkexpr(pat->loc, Oasn, pat, val, NULL);
+			asn->expr.type = exprtype(pat);
+			lappend(&fs->cap, &fs->ncap, asn);
 		}
 		break;
 	case Olit:
