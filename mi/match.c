@@ -953,7 +953,7 @@ pathdump(Path *p, FILE *out)
 }
 
 static void
-addrec(Frontier *fs, Node *val, Node *pat, Path *path)
+addrec(Frontier *fs, Node *pat, Node *val, Path *path)
 {
 	size_t i, n;
 	Type *ty, *mty;
@@ -976,7 +976,7 @@ addrec(Frontier *fs, Node *val, Node *pat, Path *path)
 			if (!dcl->decl.init) {
 				fatal(dcl, "bad pattern %s:%s: missing initializer", declname(dcl), tystr(ty));
 			}
-			addrec(fs, val, dcl->decl.init, newpath(path, 0));
+			addrec(fs, dcl->decl.init, val, newpath(path, 0));
 		} else {
 			asn = mkexpr(pat->loc, Oasn, pat, val, NULL);
 			asn->expr.type = exprtype(pat);
@@ -996,14 +996,14 @@ addrec(Frontier *fs, Node *val, Node *pat, Path *path)
 			p ->expr.type = ty;
 			v = structmemb(val, mkname(pat->loc, "len"), ty);
 
-			addrec(fs, v, p, newpath(path, 0));
+			addrec(fs, p, v, newpath(path, 0));
 
 			ty = mktype(pat->loc, Tybyte);
 			for (i = 0; i < n; i++) {
 				p = mkintlit(lit->loc, s[i]);
 				p->expr.type = ty;
 				v = arrayelt(val, i);
-				addrec(fs, v, p, newpath(path, 1+i));
+				addrec(fs, p, v, newpath(path, 1+i));
 			}
 		} else {
 			lappend(&fs->slot, &fs->nslot, newslot(path, pat, val));
@@ -1012,25 +1012,25 @@ addrec(Frontier *fs, Node *val, Node *pat, Path *path)
 	case Oaddr:
 		deref = mkexpr(val->loc, Oderef, val, NULL);
 		deref->expr.type = exprtype(pat->expr.args[0]);
-		addrec(fs, deref, pat->expr.args[0], newpath(path, 0));
+		addrec(fs, pat->expr.args[0], deref, newpath(path, 0));
 		break;
 	case Oucon:
 		uc = finducon(tybase(exprtype(pat)), pat->expr.args[0]);
 		tagid = mkintlit(pat->loc, uc->id);
 		tagid->expr.type = mktype(pat->loc, Tyint32);
-		addrec(fs, utag(val), tagid, newpath(path, 0));
+		addrec(fs, tagid, utag(val), newpath(path, 0));
 		if (uc->etype) {
-			addrec(fs, uvalue(val, uc->etype), pat->expr.args[1], newpath(path, 1));
+			addrec(fs, pat->expr.args[1], uvalue(val, uc->etype), newpath(path, 1));
 		}
 		break;
 	case Otup:
 		for (i = 0; i < pat->expr.nargs; i++) {
-			addrec(fs, tupelt(val, i), pat->expr.args[i], newpath(path, i));
+			addrec(fs, pat->expr.args[i], tupelt(val, i), newpath(path, i));
 		}
 		break;
 	case Oarr:
 		for (i = 0; i < pat->expr.nargs; i++) {
-			addrec(fs, arrayelt(val, i), pat->expr.args[i], newpath(path, i));
+			addrec(fs, pat->expr.args[i], arrayelt(val, i), newpath(path, i));
 		}
 		break;
 	case Ostruct:
@@ -1043,7 +1043,7 @@ addrec(Frontier *fs, Node *val, Node *pat, Path *path)
 				memb = mkexpr(ty->sdecls[i]->loc, Ogap, NULL);
 				memb->expr.type = mty;
 			}
-			addrec(fs, structmemb(val, name, mty), memb, newpath(path, i));
+			addrec(fs, memb, structmemb(val, name, mty), newpath(path, i));
 		}
 		break;
 	default:
@@ -1061,7 +1061,7 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 	fs->i = i;
 	fs->lbl = lbl;
 	//lappend(&fs->slot, &fs->nslot, newslot(newpath(NULL, 0), pat, val));
-	addrec(fs, val, pat, newpath(NULL, 0));
+	addrec(fs, pat, val, newpath(NULL, 0));
 	lappend(frontier, nfrontier, fs);
 }
 
