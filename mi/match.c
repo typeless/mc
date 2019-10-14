@@ -874,7 +874,7 @@ newslot(Path *path, Node *pat, Node *val)
 	s->path = path;
 	s->pat = pat;
 	s->load = val;
-	assert(exprop(pat) != Ovar);
+	assert(path != (void *)1);
 	return s;
 }
 
@@ -895,14 +895,16 @@ newpath(Path *p, char c)
 
 	newp = zalloc(sizeof(Path));
 	if (p) {
-		newp->p = memdup(p->p, p->len+1);
+		newp->p = zalloc(p->len+1);
+		memcpy(newp->p, p->p, p->len);
 		newp->p[p->len] = c;
 		newp->len = p->len+1;
 	} else {
-		newp->p = zalloc(1);
+		newp->p = zalloc(8);
 		newp->p[0] = 0;
 		newp->len = 1;
 	}
+	assert(newp->p != 0);
 	return newp;
 }
 
@@ -941,6 +943,22 @@ pateq(Node *a, Node *b)
 //{
 //	return val;
 //}
+
+char *
+pathfmt(Path *p)
+{
+	size_t i, sz, n;
+	char *buf;
+
+	sz = p->len*3+1;
+	buf = zalloc(sz);
+	n = 0;
+	for (i = 0; i < p->len; i++) {
+		n += snprintf(&buf[n], sz-n, "%02x,", p->p[i]);
+	}
+	buf[n-1] = '\0';
+	return buf;
+}
 
 void
 pathdump(Path *p, FILE *out)
@@ -1006,6 +1024,8 @@ addrec(Frontier *fs, Node *pat, Node *val, Path *path)
 				addrec(fs, p, v, newpath(path, 1+i));
 			}
 		} else {
+			fprintf(stderr, "%s-%u\n", __func__ ,__LINE__);
+			pathdump(path, stderr);
 			lappend(&fs->slot, &fs->nslot, newslot(path, pat, val));
 		}
 		break;
@@ -1070,12 +1090,12 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 static Frontier *
 project(Node *pat, Path *pi, Node *val, Frontier *fs)
 {
-	Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *deref, *asn;
-	Type *ty, *mty;
+	//Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *deref, *asn;
+	//Type *ty, *mty;
 	Slot *c, **slot;
-	Ucon *uc;
-	char *s;
-	size_t i, n, nslot;
+	//Ucon *uc;
+	//char *s;
+	size_t i, nslot;
 
 	assert (fs->nslot > 0);
 
@@ -1114,96 +1134,96 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 		return NULL;
 	}
 
-	switch (exprop(c->pat)) {
-	case Ogap:
-		break;
-	case Ovar:
-		dcl = decls[pat->expr.did];
-		if (dcl->decl.isconst) {
-			ty = decltype(dcl);
-			if (ty->type == Tyfunc || ty->type == Tycode || ty->type == Tyvalist) {
-				fatal(dcl, "bad pattern %s:%s: unmatchable type", declname(dcl), tystr(ty));
-			}
-			if (!dcl->decl.init) {
-				fatal(dcl, "bad pattern %s:%s: missing initializer", declname(dcl), tystr(ty));
-			}
-			lappend(&slot, &nslot, newslot(newpath(pi, 0), dcl->decl.init, val));
-		} else {
-			assert(0);
-			asn = mkexpr(pat->loc, Oasn, pat, val, NULL);
-			asn->expr.type = exprtype(pat);
-			lappend(&fs->cap, &fs->ncap, asn);
-		}
-		break;
-	case Olit:
-		if (c->pat->expr.args[0]->lit.littype == Lstr) {
-			lit = c->pat->expr.args[0];
-			n = lit->lit.strval.len;
-			s = lit->lit.strval.buf;
+	//switch (exprop(c->pat)) {
+	//case Ogap:
+	//	break;
+	//case Ovar:
+	//	dcl = decls[pat->expr.did];
+	//	if (dcl->decl.isconst) {
+	//		ty = decltype(dcl);
+	//		if (ty->type == Tyfunc || ty->type == Tycode || ty->type == Tyvalist) {
+	//			fatal(dcl, "bad pattern %s:%s: unmatchable type", declname(dcl), tystr(ty));
+	//		}
+	//		if (!dcl->decl.init) {
+	//			fatal(dcl, "bad pattern %s:%s: missing initializer", declname(dcl), tystr(ty));
+	//		}
+	//		lappend(&slot, &nslot, newslot(newpath(pi, 0), dcl->decl.init, val));
+	//	} else {
+	//		assert(0);
+	//		asn = mkexpr(pat->loc, Oasn, pat, val, NULL);
+	//		asn->expr.type = exprtype(pat);
+	//		lappend(&fs->cap, &fs->ncap, asn);
+	//	}
+	//	break;
+	//case Olit:
+	//	if (c->pat->expr.args[0]->lit.littype == Lstr) {
+	//		lit = c->pat->expr.args[0];
+	//		n = lit->lit.strval.len;
+	//		s = lit->lit.strval.buf;
 
-			ty = mktype(c->pat->loc, Tyuint64);
-			p = mkintlit(lit->loc, n);
-			p ->expr.type = ty;
-			v = structmemb(val, mkname(c->pat->loc, "len"), ty);
+	//		ty = mktype(c->pat->loc, Tyuint64);
+	//		p = mkintlit(lit->loc, n);
+	//		p ->expr.type = ty;
+	//		v = structmemb(val, mkname(c->pat->loc, "len"), ty);
 
-			lappend(&slot, &nslot, newslot(newpath(pi, 0), p, v));
+	//		lappend(&slot, &nslot, newslot(newpath(pi, 0), p, v));
 
-			ty = mktype(c->pat->loc, Tybyte);
-			for (i = 0; i < n; i++) {
-				p = mkintlit(lit->loc, s[i]);
-				p->expr.type = ty;
-				v = arrayelt(val, i);
-				lappend(&slot, &nslot, newslot(newpath(pi, i), p, v));
-			}
-		}
-		break;
-	case Oaddr:
-		deref = mkexpr(val->loc, Oderef, val, NULL);
-		deref->expr.type = exprtype(c->pat->expr.args[0]);
-		//fs = project(c->pat->expr.args[0], newpath(pi, 0), deref, fs);
-		lappend(&slot, &nslot, newslot(newpath(pi, 0), c->pat->expr.args[0], val));
-		break;
-	case Oucon:
-		uc = finducon(tybase(exprtype(c->pat)), c->pat->expr.args[0]);
-		tagid = mkintlit(c->pat->loc, uc->id);
-		tagid->expr.type = mktype(c->pat->loc, Tyint32);
+	//		ty = mktype(c->pat->loc, Tybyte);
+	//		for (i = 0; i < n; i++) {
+	//			p = mkintlit(lit->loc, s[i]);
+	//			p->expr.type = ty;
+	//			v = arrayelt(val, i);
+	//			lappend(&slot, &nslot, newslot(newpath(pi, i), p, v));
+	//		}
+	//	}
+	//	break;
+	//case Oaddr:
+	//	deref = mkexpr(val->loc, Oderef, val, NULL);
+	//	deref->expr.type = exprtype(c->pat->expr.args[0]);
+	//	//fs = project(c->pat->expr.args[0], newpath(pi, 0), deref, fs);
+	//	lappend(&slot, &nslot, newslot(newpath(pi, 0), c->pat->expr.args[0], val));
+	//	break;
+	//case Oucon:
+	//	uc = finducon(tybase(exprtype(c->pat)), c->pat->expr.args[0]);
+	//	tagid = mkintlit(c->pat->loc, uc->id);
+	//	tagid->expr.type = mktype(c->pat->loc, Tyint32);
 
-		//fs = project(tagid, newpath(pi, 0), utag(val), fs);
-		lappend(&slot, &nslot, newslot(newpath(pi, 0), tagid, utag(val)));
-		if (uc->etype) {
-			//fs = project(c->pat->expr.args[1], newpath(pi, 1), uvalue(val, uc->etype), fs);
-			lappend(&slot, &nslot, newslot(newpath(pi, 1), c->pat->expr.args[1], uvalue(val, uc->etype)));
-		}
-		break;
-	case Otup:
-		for (i = 0; i < c->pat->expr.nargs; i++) {
-			//fs = project(c->pat->expr.args[i], newpath(pi, i), tupelt(val, i), fs);
-			lappend(&slot, &nslot, newslot(newpath(pi, i), c->pat->expr.args[i], tupelt(val, i)));
-		}
-		break;
-	case Oarr:
-		for (i = 0; i < c->pat->expr.nargs; i++) {
-			//fs = project(c->pat->expr.args[i], newpath(pi, i), arrayelt(val, i), fs);
-			lappend(&slot, &nslot, newslot(newpath(pi, i), c->pat->expr.args[i], arrayelt(val, i)));
-		}
-		break;
-	case Ostruct:
-		ty = tybase(exprtype(c->pat));
-		for (i = 0; i < ty->nmemb; i++) {
-			mty = decltype(ty->sdecls[i]);
-			name = ty->sdecls[i]->decl.name;
-			memb = findmemb(pat, name);
-			if (!memb) {
-				memb = mkexpr(ty->sdecls[i]->loc, Ogap, NULL);
-				memb->expr.type = mty;
-			}
-			//fs = project(memb, newpath(pi, i), structmemb(val, name, mty), fs);
-			lappend(&slot, &nslot, newslot(newpath(pi, i), memb, structmemb(val, name, mty)));
-		}
-		break;
-	default:
-		break;
-	}
+	//	//fs = project(tagid, newpath(pi, 0), utag(val), fs);
+	//	lappend(&slot, &nslot, newslot(newpath(pi, 0), tagid, utag(val)));
+	//	if (uc->etype) {
+	//		//fs = project(c->pat->expr.args[1], newpath(pi, 1), uvalue(val, uc->etype), fs);
+	//		lappend(&slot, &nslot, newslot(newpath(pi, 1), c->pat->expr.args[1], uvalue(val, uc->etype)));
+	//	}
+	//	break;
+	//case Otup:
+	//	for (i = 0; i < c->pat->expr.nargs; i++) {
+	//		//fs = project(c->pat->expr.args[i], newpath(pi, i), tupelt(val, i), fs);
+	//		lappend(&slot, &nslot, newslot(newpath(pi, i), c->pat->expr.args[i], tupelt(val, i)));
+	//	}
+	//	break;
+	//case Oarr:
+	//	for (i = 0; i < c->pat->expr.nargs; i++) {
+	//		//fs = project(c->pat->expr.args[i], newpath(pi, i), arrayelt(val, i), fs);
+	//		lappend(&slot, &nslot, newslot(newpath(pi, i), c->pat->expr.args[i], arrayelt(val, i)));
+	//	}
+	//	break;
+	//case Ostruct:
+	//	ty = tybase(exprtype(c->pat));
+	//	for (i = 0; i < ty->nmemb; i++) {
+	//		mty = decltype(ty->sdecls[i]);
+	//		name = ty->sdecls[i]->decl.name;
+	//		memb = findmemb(pat, name);
+	//		if (!memb) {
+	//			memb = mkexpr(ty->sdecls[i]->loc, Ogap, NULL);
+	//			memb->expr.type = mty;
+	//		}
+	//		//fs = project(memb, newpath(pi, i), structmemb(val, name, mty), fs);
+	//		lappend(&slot, &nslot, newslot(newpath(pi, i), memb, structmemb(val, name, mty)));
+	//	}
+	//	break;
+	//default:
+	//	break;
+	//}
 
 	fs->slot = slot;
 	fs->nslot = nslot;
@@ -1235,6 +1255,8 @@ compile(Frontier **frontier, size_t nfrontier)
 			ncons++;
 		}
 	}
+	//fprintf(stderr, "[%s:%u] slot->path:%s\n", __func__, __LINE__, pathfmt(fs->slot));
+	fprintf(stderr, "[%s:%u] ncons:%ld\n", __func__, __LINE__, ncons);
 	if (ncons == 0) {
 		dt = mkdtree(fs->lbl->loc, fs->lbl);
 		dt->accept = 1;
@@ -1244,6 +1266,7 @@ compile(Frontier **frontier, size_t nfrontier)
 	assert(fs->nslot > 0);
 
 	// always select the first found constructor
+	slot = NULL;
 	for (i = 0; i < fs->nslot; i++) {
 		switch (exprop(fs->slot[i]->pat)) {
 		case Ovar:
@@ -1257,6 +1280,7 @@ compile(Frontier **frontier, size_t nfrontier)
 
 pi_found:
 	// scan constructors vertically at pi to create the set 'CS'
+	fprintf(stderr, "[%s:%u] slot:%s\n", __func__, __LINE__, opstr[exprop(slot->pat)]);
 	cs = NULL;
 	ncs = 0;
 	for (i = 0; i < nfrontier; i++) {
