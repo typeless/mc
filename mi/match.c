@@ -1134,7 +1134,7 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 		break;
 	}
 
-	//TODO FIXME
+	//TODO revisit the rules of pattern equality
 	// if constructor at the pi is not the constructor we want to project,
 	// then return null.
 	if (!pateq(pat, c->pat)) {

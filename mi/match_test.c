@@ -916,6 +916,123 @@ main(int argc, char **argv)
 				NULL,
 			},
 			.dt = &(Dtree){
+				.id = 16,
+				.load = ty(mkexpr(Zloc, Otupget, T, mkintlit(Zloc, 0), NULL), _int32),
+				.nnext = 3,
+				.npat = 3,
+				.pat = (Node*[]){
+					P(0)->expr.args[0],
+					P(1)->expr.args[0],
+					P(2)->expr.args[0],
+				},
+				.next = (Dtree*[]){
+					[0] = &(Dtree){
+						.id = 4,
+						.load = ty(mkexpr(Zloc, Otupget, T, mkintlit(Zloc, 1), NULL), _int32),
+						.nnext = 1,
+						.npat = 1,
+						.pat = (Node*[]){
+							P(0)->expr.args[1],
+						},
+						.next = (Dtree*[]){
+							[0] = &(Dtree){
+								.id = 2,
+								.load = ty(mkexpr(Zloc, Otupget, T, mkintlit(Zloc, 2), NULL), _int32),
+								.nnext = 1,
+								.npat = 1,
+								.pat = (Node*[]){
+									P(0)->expr.args[2],
+								},
+								.next = (Dtree*[]){
+									[0] = &(Dtree){
+										.id = 0,
+										.accept = 1,
+									},
+								},
+								.any = &(Dtree){
+									.id = 1,
+									.accept = 1,
+								},
+							},
+						},
+						.any = &(Dtree){
+							.id = 3,
+							.accept = 1,
+						},
+					},
+					[1] = &(Dtree){
+						.id = 9,
+						.load = ty(mkexpr(Zloc, Otupget, T, mkintlit(Zloc, 1), NULL), _int32),
+						.nnext = 1,
+						.npat = 1,
+						.pat = (Node*[]){
+							P(1)->expr.args[1],
+						},
+						.next = (Dtree*[]){
+							[0] = &(Dtree){
+								.id = 7,
+								.load = ty(mkexpr(Zloc, Otupget, T, mkintlit(Zloc, 2), NULL), _int32),
+								.nnext = 1,
+								.npat = 1,
+								.pat = (Node*[]){
+									P(1)->expr.args[2],
+								},
+								.next = (Dtree*[]){
+									[0] = &(Dtree){
+										.id = 5,
+										.accept = 1,
+									},
+								},
+								.any = &(Dtree){
+									.id = 6,
+									.accept = 1,
+								},
+							},
+						},
+						.any = &(Dtree){
+							.id = 8,
+							.accept = 1,
+						},
+					},
+					[2] = &(Dtree){
+						.id = 14,
+						.load = ty(mkexpr(Zloc, Otupget, T, mkintlit(Zloc, 1), NULL), _int32),
+						.nnext = 1,
+						.npat = 1,
+						.pat = (Node*[]){
+							P(2)->expr.args[1],
+						},
+						.next = (Dtree*[]){
+							[0] = &(Dtree){
+								.id = 12,
+								.load = ty(mkexpr(Zloc, Otupget, T, mkintlit(Zloc, 2), NULL), _int32),
+								.nnext = 1,
+								.npat = 1,
+								.pat = (Node*[]){
+									P(2)->expr.args[2],
+								},
+								.next = (Dtree*[]){
+									[0] = &(Dtree){
+										.id = 10,
+										.accept = 1,
+									},
+								},
+								.any = &(Dtree){
+									.id = 11,
+									.accept = 1,
+								},
+							},
+						},
+						.any = &(Dtree){
+							.id = 13,
+							.accept = 1,
+						},
+					},
+				},
+				.any = &(Dtree){
+					.id = 15,
+					.accept = 1,
+				},
 			},
 		},
 
