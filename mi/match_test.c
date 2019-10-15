@@ -1242,49 +1242,30 @@ main(int argc, char **argv)
 				NULL,
 			},
 			.dt = &(Dtree){
-				.id = 5,
+				.id = 3,
 				.load = ty(mkexpr(Zloc, Outag, T, NULL), _int32),
-				.nnext = 1,
-				.npat = 1,
+				.nnext = 3,
+				.npat = 3,
 				.pat = (Node*[]){
 					ty(mkintlit(Zloc, finducon(_enum3, P(0)->expr.args[0])->id), _int32),
+					ty(mkintlit(Zloc, finducon(_enum3, P(1)->expr.args[0])->id), _int32),
+					ty(mkintlit(Zloc, finducon(_enum3, P(2)->expr.args[0])->id), _int32),
 				},
 				.next = (Dtree*[]){
 					[0] = &(Dtree){
 						.id = 0,
 						.accept = 1,
 					},
-				},
-				.any = &(Dtree){
-					.id = 4,
-					.load = ty(mkexpr(Zloc, Outag, T, NULL), _int32),
-					.nnext = 1,
-					.npat = 1,
-					.pat = (Node*[]){
-						ty(mkintlit(Zloc, finducon(_enum3, P(1)->expr.args[0])->id), _int32),
+					[1] = &(Dtree){
+						.id = 1,
+						.accept = 1,
 					},
-					.next = (Dtree*[]){
-						[0] = &(Dtree){
-							.id = 1,
-							.accept = 1,
-						},
-					},
-					.any = &(Dtree){
-						.id = 3,
-						.load = ty(mkexpr(Zloc, Outag, T, NULL), _int32),
-						.nnext = 1,
-						.npat = 1,
-						.pat = (Node*[]){
-							ty(mkintlit(Zloc, finducon(_enum3, P(2)->expr.args[0])->id), _int32),
-						},
-						.next = (Dtree*[]){
-							[0] = &(Dtree){
-								.id = 2,
-								.accept = 1,
-							},
-						},
+					[2] = &(Dtree){
+						.id = 2,
+						.accept = 1,
 					},
 				},
+				.any = NULL,
 			},
 
 			//.dt = &(Dtree){
@@ -1455,21 +1436,22 @@ main(int argc, char **argv)
 				},
 			},
 		},
-		{
-			.name = "strings",
-			.val = gentemp(Zloc, _bug002s, NULL),
-			.pats = (Node*[]){
-				__P0(ty(mkexprl(Zloc, Ostruct, (Node*[]){
-					mkidxinit(Zloc, mkname(Zloc, "s2_ufoo"),
-						  ty(mkexpr(Zloc, Oucon, mkname(Zloc, "Foo"),
-							    mkintlit(Zloc, 123), NULL), _int32u1)
-						 )}, 1), _bug002s)),
-				__P_(ty(mkexpr(Zloc, Ogap, NULL), _bug002s)),
-				NULL,
-			},
-			.dt = &(Dtree){
-			},
-		},
+		//{
+		//	.name = "strings",
+		//	.val = gentemp(Zloc, _bug002s, NULL),
+		//	.pats = (Node*[]){
+		//		__P0(ty(mkexprl(Zloc, Ostruct, (Node*[]){
+		//			mkidxinit(Zloc, mkname(Zloc, "s2_ufoo"),
+		//				  ty(mkexpr(Zloc, Oucon, mkname(Zloc, "Foo"),
+		//					    mkintlit(Zloc, 123), NULL), _int32u1)
+		//				 )}, 1), _bug002s)),
+		//		__P_(ty(mkexpr(Zloc, Ogap, NULL), _bug002s)),
+		//		NULL,
+		//	},
+		//	.dt = &(Dtree){
+		//		.id = 4,
+		//	},
+		//},
 
 		{
 			.name = "bug1",
