@@ -1188,34 +1188,25 @@ main(int argc, char **argv)
 				NULL,
 			},
 			.dt = &(Dtree){
-				.id = 3,
+				.id = 2,
 				.load = ty(mkexpr(Zloc, Outag, T, NULL), _int32),
-				.nnext = 1,
-				.npat = 1,
+				.nnext = 2,
+				.npat = 2,
 				.pat = (Node*[]){
 					ty(mkintlit(Zloc, finducon(_enum2, P(0)->expr.args[0])->id), _int32),
+					ty(mkintlit(Zloc, finducon(_enum2, P(1)->expr.args[0])->id), _int32),
 				},
 				.next = (Dtree*[]){
 					[0] = &(Dtree){
 						.id = 0,
 						.accept = 1,
 					},
-				},
-				.any = &(Dtree){
-					.id = 2,
-					.load = ty(mkexpr(Zloc, Outag, T, NULL), _int32),
-					.nnext = 1,
-					.npat = 1,
-					.pat = (Node*[]){
-						ty(mkintlit(Zloc, finducon(_enum2, P(1)->expr.args[0])->id), _int32),
-					},
-					.next = (Dtree*[]){
-						[0] = &(Dtree){
-							.id = 1,
-							.accept = 1,
-						},
+					[1] = &(Dtree){
+						.id = 1,
+						.accept = 1,
 					},
 				},
+				.any = NULL,
 			},
 
 			//.dt = &(Dtree){
