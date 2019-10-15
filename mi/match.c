@@ -1090,6 +1090,7 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 static Frontier *
 project(Node *pat, Path *pi, Node *val, Frontier *fs)
 {
+	Frontier *_fs;
 	//Node *memb, *name, *tagid, *p, *v, *lit, *dcl, *deref, *asn;
 	//Type *ty, *mty;
 	Slot *c, **slot;
@@ -1111,10 +1112,18 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 		lappend(&slot, &nslot, fs->slot[i]);
 	}
 
+	_fs = zalloc(sizeof(Frontier));
+	_fs->i = fs->i;
+	_fs->lbl = fs->lbl;
+	_fs->slot = slot;
+	_fs->nslot = nslot;
+	_fs->cap = fs->cap;
+	_fs->ncap = fs->ncap;
+
 	// if the sub-term pi is not in the frontier,
 	// then we do not reduce the frontier.
 	if (c == NULL) {
-		return fs;
+		return _fs;
 	}
 
 	switch (exprop(c->pat)) {
@@ -1122,7 +1131,7 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	case Ogap:
 		// if the pattern at the sub-term pi of this frontier is not a constructor,
 		// then we do not reduce the frontier.
-		return fs;
+		return _fs;
 	default:
 		break;
 	}
@@ -1225,9 +1234,7 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	//	break;
 	//}
 
-	fs->slot = slot;
-	fs->nslot = nslot;
-	return fs;
+	return _fs;
 }
 
 static Dtree *
@@ -1304,17 +1311,8 @@ pi_found:
 	_nfrontier = 0;
 	for (i = 0; i < ncs; i++) {
 		for (j = 0; j < nfrontier; j++) {
-			// duplicate the frontier
 			fs = frontier[j];
-			_fs = zalloc(sizeof(Frontier));
-			_fs->i = fs->i;
-			_fs->lbl = fs->lbl;
-			_fs->slot = fs->slot;
-			_fs->nslot = fs->nslot;
-			_fs->cap = fs->cap;
-			_fs->ncap = fs->ncap;
-
-			_fs = project(cs[i], slot->path, slot->load, _fs);
+			_fs = project(cs[i], slot->path, slot->load, fs);
 			if (_fs != NULL) {
 				lappend(&_frontier, &_nfrontier, _fs);
 			}
@@ -1357,11 +1355,6 @@ pi_found:
 		any = NULL;
 	}
 
-
-	if (nedge == 1 && any == NULL) {
-		fprintf(stderr, "[%s:%u]\n", __func__, __LINE__);
-		return edge[0];
-	}
 	// construct the result dtree
 	_dt = mkdtree(slot->pat->loc, genlbl(slot->pat->loc));
 	_dt->load = slot->load;
