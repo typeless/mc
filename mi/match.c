@@ -1139,7 +1139,7 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	//TODO FIXME
 	// if constructor at the pi is not the constructor we want to project,
 	// then return null.
-	if (pateq(pat, c->pat)) {
+	if (!pateq(pat, c->pat)) {
 		return NULL;
 	}
 
@@ -1262,8 +1262,6 @@ compile(Frontier **frontier, size_t nfrontier)
 			ncons++;
 		}
 	}
-	//fprintf(stderr, "[%s:%u] slot->path:%s\n", __func__, __LINE__, pathfmt(fs->slot));
-	fprintf(stderr, "[%s:%u] ncons:%ld\n", __func__, __LINE__, ncons);
 	if (ncons == 0) {
 		dt = mkdtree(fs->lbl->loc, fs->lbl);
 		dt->accept = 1;
@@ -1307,9 +1305,13 @@ pi_found:
 	}
 
 	// Project a new frontier for each selected constructor
-	_frontier = NULL;
-	_nfrontier = 0;
+	edge = NULL;
+	nedge = 0;
+	_pat = NULL;
+	_npat = 0;
 	for (i = 0; i < ncs; i++) {
+		_frontier = NULL;
+		_nfrontier = 0;
 		for (j = 0; j < nfrontier; j++) {
 			fs = frontier[j];
 			_fs = project(cs[i], slot->path, slot->load, fs);
@@ -1317,15 +1319,8 @@ pi_found:
 				lappend(&_frontier, &_nfrontier, _fs);
 			}
 		}
-	}
 
-	// Recursively compile each reduced frontier
-	edge = NULL;
-	nedge = 0;
-	_pat = NULL;
-	_npat = 0;
-	if (_nfrontier) {
-		for (i = 0; i < ncs; i++) {
+		if (_nfrontier > 0) {
 			dt = compile(_frontier, _nfrontier);
 			lappend(&edge, &nedge, dt);
 			lappend(&_pat, &_npat, cs[i]);

@@ -899,7 +899,7 @@ main(int argc, char **argv)
 					     ty(mkexpr(Zloc, Olit, mkint(Zloc, 103), NULL), _int32),
 					     NULL), _int32t3)),
 				__P1(ty(mkexpr(Zloc, Otup,
-					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 101), NULL), _int32),
+					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 201), NULL), _int32),
 					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 202), NULL), _int32),
 					       ty(mkexpr(Zloc, Olit, mkint(Zloc, 203), NULL), _int32),
 					       NULL), _int32t3)),
