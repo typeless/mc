@@ -1024,8 +1024,6 @@ addrec(Frontier *fs, Node *pat, Node *val, Path *path)
 				addrec(fs, p, v, newpath(path, 1+i));
 			}
 		} else {
-			fprintf(stderr, "%s-%u\n", __func__ ,__LINE__);
-			pathdump(path, stderr);
 			lappend(&fs->slot, &fs->nslot, newslot(path, pat, val));
 		}
 		break;
@@ -1285,7 +1283,6 @@ compile(Frontier **frontier, size_t nfrontier)
 
 pi_found:
 	// scan constructors vertically at pi to create the set 'CS'
-	fprintf(stderr, "[%s:%u] slot:%s\n", __func__, __LINE__, opstr[exprop(slot->pat)]);
 	cs = NULL;
 	ncs = 0;
 	for (i = 0; i < nfrontier; i++) {
