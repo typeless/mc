@@ -59,6 +59,8 @@ struct Dtree {
 	/* captured variables and action */
 	Node **cap;
 	size_t ncap;
+
+	size_t refcnt;
 };
 
 /* dataflow analysis */

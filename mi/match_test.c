@@ -524,7 +524,7 @@ main(int argc, char **argv)
 				/**
 				 * | (_, _):
 				 */
-				__P1(ty(mkexpr(Zloc, Ogap, NULL), _int32t2)),
+				__P_(ty(mkexpr(Zloc, Ogap, NULL), _int32t2)),
 				NULL,
 			},
 			.dt = &(Dtree){

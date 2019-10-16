@@ -53,6 +53,8 @@ typedef struct Frontier {
 	size_t nslot;
 	Node **cap;
 	size_t ncap;
+	Dtree *final;
+	Dtree *error;
 } Frontier;
 
 static Node *
@@ -178,7 +180,7 @@ dtreedumpnode(FILE *fd, Dtree *dt, size_t depth)
 	size_t i;
 
 	if (dt->accept)
-		findentf(fd, depth, "%s: accept\n", lblstr(dt->lbl));
+		findentf(fd, depth, "%s: accept id:%ld ref:%ld\n", lblstr(dt->lbl), dt->id, dt->refcnt);
 
 	for (i = 0; i < dt->nnext; i++) {
 		dtreedumplit(fd, dt, dt->pat[i]->expr.args[0], depth);
@@ -380,6 +382,13 @@ genfrontier(int i, Node *val, Node *pat, Node *lbl, Frontier ***frontier, size_t
 	fs = zalloc(sizeof(Frontier));
 	fs->i = i;
 	fs->lbl = lbl;
+	fs->final = mkdtree(lbl->loc, lbl);
+	fs->final->accept = 1;
+	fs->final->refcnt = 0;
+	fs->error = mkdtree(lbl->loc, lbl);
+	fs->error->accept = 1;
+	fs->error->refcnt = 0;
+
 	addrec(fs, pat, val, newpath(NULL, 0));
 	lappend(frontier, nfrontier, fs);
 }
@@ -419,6 +428,8 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	out->nslot = nslot;
 	out->cap = fs->cap;
 	out->ncap = fs->ncap;
+	out->final = fs->final;
+	out->error = fs->error;
 
 	/*
 	 * if the sub-term at pi is not in the frontier,
@@ -475,9 +486,11 @@ compile(Frontier **frontier, size_t nfrontier)
 		}
 	}
 	if (ncons == 0) {
-		out = mkdtree(fs->lbl->loc, fs->lbl);
-		out->accept = 1;
-		return out;
+		//out = mkdtree(fs->lbl->loc, fs->lbl);
+		//out->accept = 1;
+		//out->refcnt++;
+		fs->final->refcnt++;
+		return fs->final;
 	}
 
 	assert(fs->nslot > 0);
@@ -500,6 +513,8 @@ compile(Frontier **frontier, size_t nfrontier)
 	}
 
 pi_found:
+	assert(slot != NULL);
+
 	/* scan constructors vertically at pi to create the set 'CS' */
 	cs = NULL;
 	ncs = 0;
@@ -565,13 +580,17 @@ pi_found:
 				k = j;
 		}
 
-		if (k == -1 || exprop(fs->slot[k]->pat) == Ovar || exprop(fs->slot[k]->pat) == Ogap)
+		if (k == -1)
+			continue;
+		if (exprop(fs->slot[k]->pat) == Ovar || exprop(fs->slot[k]->pat) == Ogap)
 			lappend(&defaults, &ndefaults, fs);
 	}
 	if (ndefaults)
 		any = compile(defaults, ndefaults);
-	else
+	else {
+		fs->error->refcnt++;
 		any = NULL;
+	}
 
 	/* construct the result dtree */
 	out = mkdtree(slot->pat->loc, genlbl(slot->pat->loc));
@@ -614,6 +633,11 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl, int startid)
 
 	if (debugopt['M'] || getenv("M"))
 		dtreedump(stdout, root);
+
+	for (i = 0; i < nfrontier; i++) {
+		if (frontier[i]->error->refcnt)
+			fatal(m, "nonexhaustive pattern set in match statement");
+	}
 
 	return root;
 }
