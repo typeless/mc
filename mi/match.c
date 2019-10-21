@@ -57,6 +57,7 @@ typedef struct Slot {
 	Path *path;
 	Node *pat;
 	Node *load;
+	int score;
 } Slot;
 
 static Slot *
@@ -67,6 +68,7 @@ mkslot(Path *path, Node *pat, Node *val)
 	s->path = path;
 	s->pat = pat;
 	s->load = val;
+	s->score = 0;
 	assert(path != (void *)1);
 	return s;
 }
@@ -589,6 +591,34 @@ project(Node *pat, Path *pi, Node *val, Frontier *fs)
 	return out;
 }
 
+static size_t
+heuristics_N(Frontier **frontier, size_t nfrontier, int***chosen, size_t *nchosen)
+{
+	size_t i, k;
+	int max;
+
+	for (i = 0; i < fs->nslot; i++) {
+		/* NOTE:
+		 * scan backward so that slots with equal scores will have left-to-right order
+		 * rationale: left-to-right order is more or less natural/expected
+		 */
+		k = fs->nslot-i-1;
+
+		switch (exprop(fs->slot[k]->pat)) {
+		case Ovar:
+		case Ogap:
+			continue;
+		default:
+			if (fs->slot[k]->score >= max) {
+				slot = fs->slot[k];
+				max = slot->score;
+			}
+		}
+	}
+	lappend(chosen, nchosen);
+	return *nchosen;
+}
+
 /* compile implements the algorithm outlined in the paper
  * "When Do Match-Compilation Heuristics Matter?" by Kevin Scott and Norman Ramsey
  * It generates either a TEST or MATCH (accept=1) dtree, where MATCH is the base case.
@@ -622,7 +652,8 @@ compile(Frontier **frontier, size_t nfrontier)
 	Frontier *fs, **row, **defaults ;
 	Node **cs, **pat;
 	Slot *slot, *s;
-	size_t ncs, ncons, nrow, nedge, ndefaults, npat;
+	size_t ncs, ncons, nrow, nedge, ndefaults, npat, nchosen;
+	int **chosen;
 
 	assert(nfrontier > 0);
 
@@ -651,19 +682,18 @@ compile(Frontier **frontier, size_t nfrontier)
 	 * we always select the first found constructor, i.e. the top-left one.
 	 */
 
+	nchosen = 0;
+	chosen = NULL;
 	slot = NULL;
-	for (i = 0; i < fs->nslot; i++) {
-		switch (exprop(fs->slot[i]->pat)) {
-		case Ovar:
-		case Ogap:
-			continue;
-		default:
-			slot = fs->slot[i];
-			goto pi_found;
-		}
-	}
 
-pi_found:
+	do {
+		if (heuristics_N(frontier, nfrontier, &chosen, &nchosen) == 1)
+			break;
+
+	} while (0);
+
+	assert(slot != NULL);
+
 	/* scan constructors vertically at pi to create the set 'CS' */
 	cs = NULL;
 	ncs = 0;
