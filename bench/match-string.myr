@@ -1,0 +1,23 @@
+use std
+use testr
+
+const main = {
+	testr.bench([
+		[.name="matchstring", .fn=matchstring],
+	][:])
+}
+
+const matchstring = {ctx
+	var v = "xxxxxxxx"
+	match v
+	| "openbsd": 1
+	| "freebsd": 2
+	| "linux": 3
+	| "windows": 4
+	| "netbsd": 5
+	| "android": 6
+	| "": 7
+	| _: 8
+	;;
+
+}

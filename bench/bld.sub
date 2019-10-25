@@ -50,3 +50,7 @@ bench many-memcpy =
 	lib ../lib/sys:sys
 	lib ../lib/testr:testr
 ;;
+
+bench match-string =
+	match-string.myr
+;;
