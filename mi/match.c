@@ -834,8 +834,13 @@ genmatchstring(dt *dt, Node ***out, size_t *nout, Node *succ, Node *fail)
 	p ->expr.type = ty;
 	v = structmemb(dt->load, mkname(dt->pat[i]->loc, "len"), ty);
 
-	/* compare the length */
+	/* initialize the loop counter */
+	idx = gentemp(dt->loc, ty, NULL);
+	asn = mkexpr(dt->loc, Oasn, idx, zero, NULL);
+	asn->expr.type = exprtype(idx);
+	lappend(out, nout, asn);
 
+	/* compare the string length */
 	eq = mkexpr(dt->loc, Oeq, v, p, NULL);
 	eq->expr.type = mktype(dt->loc, Tybool);
 	jmp = mkexpr(dt->loc, Ocjmp, eq, loop, fail, NULL);
@@ -843,12 +848,6 @@ genmatchstring(dt *dt, Node ***out, size_t *nout, Node *succ, Node *fail)
 	lappend(out, nout, jmp);
 
 	/* compare the byte array */
-
-	idx = gentemp(dt->loc, ty, NULL);
-	asn = mkexpr(dt->loc, Oasn, idx, zero, NULL);
-	asn->expr.type = exprtype(idx);
-	lappend(out, nout, asn);
-
 	loop= genlbl(dt->loc);
 	lappend(out, nout, loop);
 
@@ -857,7 +856,7 @@ genmatchstring(dt *dt, Node ***out, size_t *nout, Node *succ, Node *fail)
 	asn = mkexpr(dt->loc, Oasn, idx, inc);
 	lappend(asn);
 
-	v = mkexpr(dt->loc, Oidx, n, idx, NULL);
+	v = mkexpr(dt->loc, Oidx, dt->load, idx, NULL);
 	v->expr.type = tybase(exprtype(n))->sub[0];
 
 	p = mkexpr(dt->loc, Oidx, lit, idx);
