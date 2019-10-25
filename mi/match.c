@@ -814,33 +814,33 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl, int startid)
 static void
 genmatchstring(Dtree *dt, size_t i, Node ***out, size_t *nout, Node *succ, Node *fail)
 {
-	Node *jmp, *eq, *v, *p, *lit, *idx, *zero, *asn, *inc, *one, *loop, *start, *cont;
-	Type *ty, *mty;
+	Node *jmp, *eq, *v, *p, *lit, *idx, *zero, *ub, *asn, *inc, *one, *loop, *start, *cont;
+	Type *ity, *mty;
 	size_t n;
 
-	ty = mktype(dt->pat[i]->loc, Tyuint64);
+	ity = mktype(dt->pat[i]->loc, Tyuint64);
 	mty = mktype(dt->pat[i]->loc, Tybyte);
 
 	zero = mkintlit(dt->loc, 0);
-	zero->expr.type = ty;
+	zero->expr.type = ity;
 	one = mkintlit(dt->loc, 1);
-	zero->expr.type = ty;
+	one->expr.type = ity;
 
 	lit = dt->pat[i]->expr.args[0];
 	n = lit->lit.strval.len;
 
 	p = mkintlit(lit->loc, n);
-	p ->expr.type = ty;
-	v = structmemb(dt->load, mkname(dt->pat[i]->loc, "len"), ty);
+	p ->expr.type = ity;
+	v = structmemb(dt->load, mkname(dt->pat[i]->loc, "len"), ity);
 
 	/* initialize the loop counter */
-	idx = gentemp(dt->loc, ty, NULL);
+	idx = gentemp(dt->loc, ity, NULL);
 	asn = mkexpr(dt->loc, Oasn, idx, zero, NULL);
 	asn->expr.type = exprtype(idx);
 	lappend(out, nout, asn);
 
 	/* compare the string length */
-	loop= genlbl(dt->loc);
+	loop = genlbl(dt->loc);
 	eq = mkexpr(dt->loc, Oeq, v, p, NULL);
 	eq->expr.type = mktype(dt->loc, Tybool);
 	jmp = mkexpr(dt->loc, Ocjmp, eq, loop, fail, NULL);
@@ -851,7 +851,9 @@ genmatchstring(Dtree *dt, size_t i, Node ***out, size_t *nout, Node *succ, Node 
 	lappend(out, nout, loop);
 
 	start = genlbl(dt->loc);
-	eq = mkexpr(dt->loc, Olt, idx, mkintlit(dt->loc, n), NULL);
+	ub = mkintlit(dt->loc, n);
+	ub->expr.type = ity;
+	eq = mkexpr(dt->loc, Olt, idx, ub, NULL);
 	eq->expr.type = mktype(dt->loc, Tybool);
 	jmp = mkexpr(dt->loc, Ocjmp, eq, start, succ, NULL);
 	jmp->expr.type = mktype(dt->loc, Tyvoid);
@@ -875,7 +877,7 @@ genmatchstring(Dtree *dt, size_t i, Node ***out, size_t *nout, Node *succ, Node 
 	lappend(out, nout, cont);
 
 	inc = mkexpr(dt->loc, Oadd, idx, one, NULL);
-	inc->expr.type = ty;
+	inc->expr.type = ity;
 	asn = mkexpr(dt->loc, Oasn, idx, inc, NULL);
 	asn->expr.type = exprtype(idx);
 	lappend(out, nout, asn);
