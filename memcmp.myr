@@ -1,9 +1,10 @@
 use std
 
-const memcmp = {a : byte[:], b : byte[:], n
+const memcmp = {a : byte[:], n
 	var i = 0
+	//var b : byte[:] = "abcef"
  	while i < n 
-		if a[i] != b[i]
+		if a[i] != "abcdef"[i]
 			->false
 		;;
 		i++
@@ -22,7 +23,7 @@ const main = {
 		n = b.len
 	;;
 
-	if memcmp(a, b, n)
+	if memcmp(a, n)
 		std.put("matched")
 	;;
 }
