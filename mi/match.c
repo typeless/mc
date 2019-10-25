@@ -811,6 +811,73 @@ gendtree(Node *m, Node *val, Node **lbl, size_t nlbl, int startid)
 	return root;
 }
 
+static void
+genmatchstring(dt *dt, Node ***out, size_t *nout, Node *succ, Node *fail)
+{
+	Node *jmp, *eq, *v, *p, *lit, *idx, *zero, *asn, *str, *inc, *one, *loop, *cont;
+	Type *ty, *mty;
+	size_t i, n;
+	char *s;
+
+	zero = mkintlit(dt->loc, 0);
+	zero->expr.type = ty;
+	one = mkintlit(dt->loc, 1);
+	zero->expr.type = ty;
+
+	lit = dt->pat[i]->expr.args[0];
+	n = lit->lit.strval.len;
+
+	ty = mktype(dt->pat[i]->loc, Tyuint64);
+	mty = mktype(dt->pat[i]->loc, Tybyte);
+
+	p = mkintlit(lit->loc, n);
+	p ->expr.type = ty;
+	v = structmemb(dt->load, mkname(dt->pat[i]->loc, "len"), ty);
+
+	/* compare the length */
+
+	eq = mkexpr(dt->loc, Oeq, v, p, NULL);
+	eq->expr.type = mktype(dt->loc, Tybool);
+	jmp = mkexpr(dt->loc, Ocjmp, eq, loop, fail, NULL);
+	jmp->expr.type = mktype(dt->loc, Tyvoid);
+	lappend(out, nout, jmp);
+
+	/* compare the byte array */
+
+	idx = gentemp(dt->loc, ty, NULL);
+	asn = mkexpr(dt->loc, Oasn, idx, zero, NULL);
+	asn->expr.type = exprtype(idx);
+	lappend(out, nout, asn);
+
+	loop= genlbl(dt->loc);
+	lappend(out, nout, loop);
+
+	inc = mkexpr(dt->loc, Oadd, idx, one);
+	inc->expr.type = ty;
+	asn = mkexpr(dt->loc, Oasn, idx, inc);
+	lappend(asn);
+
+	v = mkexpr(dt->loc, Oidx, n, idx, NULL);
+	v->expr.type = tybase(exprtype(n))->sub[0];
+
+	p = mkexpr(dt->loc, Oidx, lit, idx);
+	p->expr.type = mty;
+
+	eq = mkexpr(dt->loc, Oeq, v, p, NULL);
+	eq->expr.type = mktype(dt->loc, Tybool);
+	jmp = mkexpr(dt->loc, Ocjmp, eq, cont, fail, NULL);
+	jmp->expr.type = mktype(dt->loc, Tyvoid);
+	lappend(out, nout, jmp);
+
+	cont = genlbl(dt->loc);
+	lappend(out, nout, cont)
+
+	eq = mkexpr(dt->loc, Olt, idx, mkintlit(dt->loc, n));
+	eq->expr.type = mktype(dt->loc, Tybool);
+	jmp = mkexpr(dt->loc, Ocjmp, eq, loop, succ);
+	lappend(out, nout, jmp);
+}
+
 void
 genmatchcode(Dtree *dt, Node ***out, size_t *nout)
 {
@@ -843,55 +910,7 @@ genmatchcode(Dtree *dt, Node ***out, size_t *nout)
 		}
 
 		if (exprop(dt->pat[i]) == Olit && dt->pat[i]->expr.args[0]->lit.littype == Lstr)  {
-			lit = dt->pat[i]->expr.args[0];
-			n = lit->lit.strval.len;
-			s = lit->lit.strval.buf;
-
-			ty = mktype(dt->pat[i]->loc, Tyuint64);
-			p = mkintlit(lit->loc, n);
-			p ->expr.type = ty;
-			v = structmemb(dt->load, mkname(dt->pat[i]->loc, "len"), ty);
-
-			eq = mkexpr(dt->loc, Oeq, v, p, NULL);
-			eq->expr.type = mktype(dt->loc, Tybool);
-			jmp = mkexpr(dt->loc, Ocjmp, eq, succ, fail, NULL);
-			jmp->expr.type = mktype(dt->loc, Tyvoid);
-			lappend(out, nout, jmp);
-
-			succ = genlbl(dt->loc);
-			lappend(out, nout, succ);
-
-			inc = mkexpr(dt->loc, Oadd, idx, one);
-			inc->expr.type = ty;
-			asn = mkexpr(dt->loc, Oasn, idx, inc);
-			lappend(asn);
-
-			zero = mkintlit(dt->loc, 0);
-			zero->expr.type = ty;
-			one = mkintlit(dt->loc, 1);
-			zero->expr.type = ty;
-
-			idx = gentemp(dt->loc, ty, NULL);
-
-			asn = mkexpr(dt->loc, Oasn, idx, zero, NULL);
-			asn->expr.type = exprtype(idx);
-			lappend(out, nout, asn);
-
-			mty = mktype(dt->pat[i]->loc, Tybyte);
-
-			v = mkexpr(dt->loc, Oidx, n, idx, NULL);
-			v->expr.type = tybase(exprtype(n))->sub[0];
-
-			p = mkexpr(dt->loc, Oidx, lit, idx);
-			p->expr.type = mty;
-
-			eq = mkexpr(dt->loc, Oeq, v, p, NULL);
-			eq->expr.type = mktype(dt->loc, Tybool);
-			jmp = mkexpr(dt->loc, Ocjmp, eq, succ, fail, NULL);
-			jmp->expr.type = mktype(dt->loc, Tyvoid);
-			lappend(out, nout, jmp);
-
-
+			genmatchstring(dt, out, nout, dt->next[i]->lbl, fail);
 		} else {
 			eq = mkexpr(dt->loc, Oeq, dt->load, dt->pat[i], NULL);
 			eq->expr.type = mktype(dt->loc, Tybool);
