@@ -1,0 +1,28 @@
+use std
+
+const memcmp = {a : byte[:], b : byte[:], n
+	var i = 0
+ 	while i < n 
+		if a[i] != b[i]
+			->false
+		;;
+		i++
+	;;
+	-> true
+}
+
+const main = {
+	var a = "abc"
+	var b = "abd"
+	var n
+
+	if a.len <= b.len
+		n = a.len
+	else
+		n = b.len
+	;;
+
+	if memcmp(a, b, n)
+		std.put("matched")
+	;;
+}
