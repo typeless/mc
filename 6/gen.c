@@ -197,7 +197,10 @@ gen(char *out)
 		break;
 	case Gnugaself:
 	case Gnugasmacho:
-		gengas(fd);
+		if (getenv("GENC"))
+			genc(fd);
+		else
+			gengas(fd);
 		break;
 	default:
 		die("unknown target");  break;

@@ -259,6 +259,7 @@ void selfunc(Isel *is, Func *fn, Htab *globls, Htab *strtab);
 void gen(char *out);
 void gengas(FILE *fd);
 void genp9(FILE *fd);
+void genc(FILE *fd);
 
 /* blob stuff */
 Blob *mkblobpad(size_t sz);

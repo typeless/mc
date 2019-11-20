@@ -310,8 +310,16 @@ main(int argc, char **argv)
 			gentempfile(buf, sizeof buf, ctx.args[i], ".s");
 		}
 		genuse(ctx.args[i]);
-		gen(buf);
-		assemble(buf, ctx.args[i]);
+
+		if (getenv("GENC")) {
+			FILE *f = fopen(buf, "w");
+			if (!f)
+				die("Couldn't open fd %s", buf);
+			genc(f);
+		} else {
+			gen(buf);
+			assemble(buf, ctx.args[i]);
+		}
 
 		free(localincpath);
 	}

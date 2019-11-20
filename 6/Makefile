@@ -11,6 +11,7 @@ OBJ= \
 	peep.o \
 	simp.o \
 	typeinfo.o \
+	genc.o
 
 DEPS=../parse/libparse.a ../mi/libmi.a ../util/libutil.a
 
