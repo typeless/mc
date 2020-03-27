@@ -42,6 +42,24 @@ static char *modenames[] = {
 
 static void locprint(FILE *fd, Loc *l, char spec);
 
+static char *mangle(char *lbl)
+{
+	char buf[1024];
+
+	switch (asmsyntax) {
+	case Gnugaself:
+		return lbl;
+	case Gnugasmacho:
+		if (lbl[0] == '.') {
+			bprintf(buf, sizeof buf, "L%s", &lbl[1]);
+			return strdup(buf);
+		} else
+			return lbl;
+	default:
+		die("unknown target");  break;
+	}
+}
+
 void
 printmem(FILE *fd, Loc *l, char spec)
 {
@@ -50,7 +68,7 @@ printmem(FILE *fd, Loc *l, char spec)
 			fprintf(fd, "%ld", l->mem.constdisp);
 	} else {
 		if (l->mem.lbldisp)
-			fprintf(fd, "%s", l->mem.lbldisp);
+			fprintf(fd, "%s", mangle(l->mem.lbldisp));
 	}
 	if (l->mem.base) {
 		fprintf(fd, "(");
@@ -75,11 +93,11 @@ locprint(FILE *fd, Loc *l, char spec)
 	switch (l->type) {
 	case Loclitl:
 		assert(spec == 'i' || spec == 'x' || spec == 'u');
-		fprintf(fd, "$%s", l->lbl);
+		fprintf(fd, "$%s", mangle(l->lbl));
 		break;
 	case Loclbl:
 		assert(spec == 'm' || spec == 'v' || spec == 'x');
-		fprintf(fd, "%s", l->lbl);
+		fprintf(fd, "%s", mangle(l->lbl));
 		break;
 	case Locreg:
 		assert((spec == 'r' && isintmode(l->mode)) ||
@@ -230,11 +248,13 @@ genstrings(FILE *fd, Htab *strtab)
 	void **k;
 	Str *s;
 	size_t i, nk;
+	char *lbl;
 
 	k = htkeys(strtab, &nk);
 	for (i = 0; i < nk; i++) {
 		s = k[i];
-		fprintf(fd, "%s:\n", (char*)htget(strtab, k[i]));
+		lbl = mangle((char*)htget(strtab, k[i]));
+		fprintf(fd, "%s:\n", lbl);
 		writebytes(fd, s->buf, s->len);
 	}
 }
@@ -257,12 +277,12 @@ writeasm(FILE *fd, Isel *s, Func *fn)
 	}
 	if (fn->isexport)
 		fprintf(fd, ".globl %s\n", fn->name);
-	fprintf(fd, "%s:\n", fn->name);
+	fprintf(fd, "%s:\n", mangle(fn->name));
 	for (j = 0; j < s->cfg->nbb; j++) {
 		if (!s->bb[j])
 			continue;
 		for (i = 0; i < s->bb[j]->nlbls; i++)
-			fprintf(fd, "%s:\n", s->bb[j]->lbls[i]);
+			fprintf(fd, "%s:\n", mangle(s->bb[j]->lbls[i]));
 		for (i = 0; i < s->bb[j]->ni; i++)
 			iprintf(fd, s->bb[j]->il[i]);
 	}
@@ -298,10 +318,10 @@ emitonce(FILE *fd, Blob *b)
 {
 	if (asmsyntax == Gnugaself) {
 		fprintf(fd, ".section .text.%s%s,\"aG\",%s%s,comdat\n",
-			Symprefix, b->lbl, Symprefix, b->lbl);
+			Symprefix, mangle(b->lbl), Symprefix, mangle(b->lbl));
 	} else if (asmsyntax == Gnugasmacho) {
 		if (b->isglobl)
-			fprintf(fd, ".weak_def_can_be_hidden %s%s\n", Symprefix, b->lbl);
+			fprintf(fd, ".weak_def_can_be_hidden %s%s\n", Symprefix, mangle(b->lbl));
 	} else {
 		die("Unknown asm flavor");
 	}
@@ -318,8 +338,8 @@ writeblob(FILE *fd, Blob *b)
 		if (b->iscomdat)
 			emitonce(fd, b);
 		if (b->isglobl)
-			fprintf(fd, ".globl %s%s\n", Symprefix, b->lbl);
-		fprintf(fd, "%s%s:\n", Symprefix, b->lbl);
+			fprintf(fd, ".globl %s%s\n", Symprefix, mangle(b->lbl));
+		fprintf(fd, "%s%s:\n", Symprefix, mangle(b->lbl));
 	}
 	switch (b->type) {
 	case Btimin:	encodemin(fd, b->ival);	break;
@@ -329,7 +349,7 @@ writeblob(FILE *fd, Blob *b)
 	case Bti64:	fprintf(fd, "\t.quad %llu\n", b->ival);	break;
 	case Btbytes:	writebytes(fd, b->bytes.buf, b->bytes.len);	break;
 	case Btpad:	fprintf(fd, "\t.fill %llu,1,0\n", b->npad);	break;
-	case Btref:	fprintf(fd, "\t.quad %s + %zd\n", b->ref.str, b->ref.off);	break;
+	case Btref:	fprintf(fd, "\t.quad %s + %zd\n", mangle(b->ref.str), b->ref.off);	break;
 	case Btseq:
 		for (i = 0; i < b->seq.nsub; i++)
 			writeblob(fd, b->seq.sub[i]);
@@ -383,7 +403,7 @@ gentype(FILE *fd, Type *ty)
 	if (b->isglobl)
 		b->iscomdat = 1;
 	if (asmsyntax == Gnugaself)
-		fprintf(fd, ".section .data.%s,\"aw\",@progbits\n", b->lbl);
+		fprintf(fd, ".section .data.%s,\"aw\",@progbits\n", mangle(b->lbl));
 	writeblob(fd, b);
 	blobfree(b);
 }
@@ -415,7 +435,7 @@ genblob(FILE *fd, Node *blob, Htab *globls, Htab *strtab)
 	/* lits and such also get wrapped in decls */
 	assert(blob->type == Ndecl);
 
-	lbl = htget(globls, blob);
+	lbl = mangle(htget(globls, blob));
 	if (blob->decl.vis != Visintern)
 		fprintf(fd, ".globl %s\n", lbl);
 	if (asmsyntax == Gnugaself)
@@ -481,6 +501,16 @@ gengas(FILE *fd)
 	for (i = 0; i < file.nfiles; i++) {
 		path = file.files[i];
 		fprintf(fd, ".file %zd \"%s/%s\"\n", i + 1, dir, path);
+	}
+
+	switch (asmsyntax) {
+	case Gnugaself:
+		break;
+	case Gnugasmacho:
+		fprintf(fd, ".subsections_via_symbols\n");
+		break;
+	default:
+		die("unknown target");  break;
 	}
 
 	strtab = mkht(strlithash, strliteq);

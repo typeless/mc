@@ -61,6 +61,7 @@ case $OS in
         echo 'const Sys = "OSX"' >> mbld/config.myr
         echo 'const Linkcmd = ["ld", ' \
             '"-static", "-pagezero_size", "0x100000000", "-no_pie",' \
+	    '"-dead_strip"' \
             ']' >> mbld/config.myr
         echo "const Manpath = \"share/man/man\"" >> mbld/config.myr
         echo 'const Dlflags : byte[:][:] = [][:]' >> mbld/config.myr
