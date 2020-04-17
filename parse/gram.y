@@ -838,6 +838,10 @@ atomicexpr
 		$$ = mkexpr($1->loc, Ovar, $3, NULL);
 		$$->expr.param = $5;
 	}
+	| Tdot Toparen expr Tcparen
+	{$$ = mkexpr($1->loc, Oconst, $3, NULL);}
+	| Tdot Tident
+	{$$ = mkexpr($1->loc, Oconst, mkexpr($2->loc, Ovar, mkname($2->loc, $2->id), NULL), NULL);}
 	;
 
 tupbody : tuphead tuprest

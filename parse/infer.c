@@ -1531,16 +1531,29 @@ inferpat(Node **np, Node *val, Node ***bind, size_t *nbind)
 
 	n = *np;
 	n = checkns(n, np);
+	n->expr.ispat = 1;
 	args = n->expr.args;
+
+	if (exprop(n) == Oconst) {
+		inferexpr(&args[0], NULL, NULL);
+		t = type(args[0]);
+		settype(n, t);
+		infernode(np, NULL, NULL);
+		return;
+	}
+
 	for (i = 0; i < n->expr.nargs; i++)
-		if (args[i]->type == Nexpr)
+		if (args[i]->type == Nexpr) {
+			args[i]->expr.ispat = 1;
 			inferpat(&args[i], val, bind, nbind);
+		}
 	switch (exprop(n)) {
 	case Otup:
 	case Ostruct:
 	case Oarr:
 	case Olit:
 	case Omemb:
+	case Obor:
 		infernode(np, NULL, NULL);
 		break;
 		/* arithmetic expressions just need to be constant */
@@ -1552,7 +1565,6 @@ inferpat(Node **np, Node *val, Node ***bind, size_t *nbind)
 	case Obsl:
 	case Obsr:
 	case Oband:
-	case Obor:
 	case Obxor:
 	case Obnot:
 		infernode(np, NULL, NULL);
@@ -1700,8 +1712,11 @@ inferexpr(Node **np, Type *ret, int *sawret)
 	case Obsreq:	/* @a >>= @a -> @a */
 		infersub(n, ret, sawret, &isconst);
 		t = type(args[0]);
-		constrain(n, t, traittab[Tcnum]);
-		constrain(n, t, traittab[Tcint]);
+
+		if (!n->expr.ispat) {
+			constrain(n, t, traittab[Tcnum]);
+			constrain(n, t, traittab[Tcint]);
+		}
 		isconst = args[0]->expr.isconst;
 		for (i = 1; i < nargs; i++) {
 			isconst = isconst && args[i]->expr.isconst;
@@ -1814,6 +1829,18 @@ inferexpr(Node **np, Type *ret, int *sawret)
 			args[0] = getlbl(curstab(), args[0]->loc, args[0]->lit.lblname);
 		infersub(n, ret, sawret, &isconst);
 		settype(n, mktype(Zloc, Tyvoid));
+		break;
+	case Oconst:
+		/*
+		 * what we do here is to fold the expression wrapped by Oconst
+		 */
+		infersub(n, ret, sawret, &isconst);
+		if (!isconst) {
+			fatal(n, "value of expression is not compile-time computable");
+		}
+		t = type(args[0]);
+		n->expr.isconst = isconst;
+		settype(n, t);
 		break;
 	case Ovar:	/* a:@a -> @a */
 		infersub(n, ret, sawret, &isconst);

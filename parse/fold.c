@@ -230,7 +230,7 @@ fold(Node *n, int foldvar)
 			r = val(n->loc, a >> b, exprtype(n));
 		break;
 	case Obor:
-		if (getintlit(args[0], &a) && getintlit(args[1], &b))
+		if (getintlit(args[0], &a) && getintlit(args[1], &b) && !n->expr.ispat)
 			r = val(n->loc, a | b, exprtype(n));
 		break;
 	case Oband:

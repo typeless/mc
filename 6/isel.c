@@ -872,6 +872,9 @@ selexpr(Isel *s, Node *n)
 	case Olit:
 		r = loc(s, n);
 		break;
+	case Oconst:
+		assert(0);
+		break;
 	case Ovar:
 		if (isconstfn(n)) {
 			r = locreg(ModeQ);
