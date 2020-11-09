@@ -35,10 +35,15 @@ const Cachemax	= 4
 const Bktmax	= 128*KiB	/* a balance between wasted space and falling back to mmap */
 const Pagesz	= 4*KiB
 
-var buckets	: bucket[32] /* excessive */
-var trace	: bool
+var top		: allocator#
+var base	: allocator
 var tracefd	: std.fd
-var bigcache	: cacheelt[32]
+var trace	: bool
+
+type allocator = struct
+	buckets	: bucket[32] /* excessive */
+	bigcache: cacheelt[32]
+;;
 
 type bucket = struct
 	sz	: size	/* aligned size */
@@ -68,8 +73,9 @@ type cacheelt = struct
 ;;
 
 const __init__ = {
-	for var i = 0; i < buckets.len && (Align << i) <= Bktmax; i++
-		bktinit(&buckets[i], Align << i)
+	top = &base
+	for var i = 0; i < top.buckets.len && (Align << i) <= Bktmax; i++
+		bktinit(&top.buckets[i], Align << i)
 	;;
 }
 
@@ -127,7 +133,7 @@ const bytealloc = {sz
 	var bkt, p
 
 	if sz <= Bktmax
-		bkt = &buckets[bktnum(sz)]
+		bkt = &top.buckets[bktnum(sz)]
 		lock(memlck)
 		p = bktalloc(bkt)
 		unlock(memlck)
@@ -156,7 +162,7 @@ const bytefree = {p, sz
 	;;
 	memfill(p, 0xa8, sz)
 	if (sz < Bktmax)
-		bkt = &buckets[bktnum(sz)]
+		bkt = &top.buckets[bktnum(sz)]
 		lock(memlck)
 		bktfree(bkt, p)
 		unlock(memlck)
@@ -167,7 +173,9 @@ const bytefree = {p, sz
 
 const bigalloc = {sz
 	var p
+	var bigcache
 
+	bigcache = &top.bigcache
 	p = Failmem
 	/*
 	 We need to round up to the page size so that unmapping
@@ -177,8 +185,8 @@ const bigalloc = {sz
 
 	/* check our cache */
 	lock(memlck)
-	for var i = 0; i < bigcache.len; i++
-		if sz < bigcache[i].sz
+	for var i = 0; i < bigcache#.len; i++
+		if sz < bigcache#[i].sz
 			/*
 			While the allocator may never use a small chunk, we need
 			to keep it together so when unmapping it in the free call,
@@ -187,9 +195,9 @@ const bigalloc = {sz
 
 			Eviction takes care of freeing it.
 			*/
-			p = bigcache[i].p
-			bigcache[i].sz -= sz
-			bigcache[i].p = ((p : intptr) + (sz : intptr) : byte#)
+			p = bigcache#[i].p
+			bigcache#[i].sz -= sz
+			bigcache#[i].p = ((p : intptr) + (sz : intptr) : byte#)
 			break
 		;;
 	;;
@@ -209,40 +217,42 @@ const bigalloc = {sz
 const bigfree = {p, sz
 	var evictsz, evictp, evictidx
 	var endp, endblk
+	var bigcache : cacheelt[32]#
 
+	bigcache = &top.bigcache
 	sz = align(sz, Pagesz)
 	evictp = p
 	evictidx = -1
 	evictsz = sz
 	endp = ((p : intptr) + (sz : intptr) : byte#)
 	lock(memlck)
-	for var i = 0; i < bigcache.len; i++
-		endblk = ((bigcache[i].p : intptr) + (bigcache[i].sz : intptr) : byte#)
+	for var i = 0; i < bigcache#.len; i++
+		endblk = ((bigcache#[i].p : intptr) + (bigcache#[i].sz : intptr) : byte#)
 		/* merge in front of existing block */
-		if bigcache[i].p == endp
-			bigcache[i].sz += sz
-			bigcache[i].p = p
+		if bigcache#[i].p == endp
+			bigcache#[i].sz += sz
+			bigcache#[i].p = p
 			evictidx = -1
 			evictsz = 0
 			break
 		/* merge in behind existing block */
 		elif endblk == p
-			bigcache[i].sz += sz
+			bigcache#[i].sz += sz
 			evictidx = -1
 			evictsz = 0
 			break
 		;;
 		/* evict */
-		if bigcache[i].sz < evictsz
+		if bigcache#[i].sz < evictsz
 			evictidx = i
-			evictsz = bigcache[i].sz
-			evictp = bigcache[i].p
+			evictsz = bigcache#[i].sz
+			evictp = bigcache#[i].p
 		;;
 	;;
 
 	if evictidx != -1
-		bigcache[evictidx].p = p
-		bigcache[evictidx].sz = sz
+		bigcache#[evictidx].p = p
+		bigcache#[evictidx].sz = sz
 	;;
 	unlock(memlck)
 
