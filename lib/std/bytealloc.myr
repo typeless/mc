@@ -19,6 +19,9 @@ pkg std =
 	const zbytealloc	: (sz:size -> byte#)
 	const bytefree		: (m:byte#, sz:size -> void)
 
+	generic escape		: (f : (-> @a) ->  @a)
+	generic region		: (f : (-> @a) ->  @a)
+
 	/* null pointers. only used internally. */
 	pkglocal const Zslicep	= (0 : byte#)
 	pkglocal const Align	= 16	/* minimum allocation alignment */
@@ -35,16 +38,15 @@ const Cachemax	= 4
 const Bktmax	= 128*KiB	/* a balance between wasted space and falling back to mmap */
 const Pagesz	= 4*KiB
 
-var buckets	: bucket[32] /* excessive */
 var trace	: bool
 var tracefd	: std.fd
-var bigcache	: cacheelt[32]
 
 type bucket = struct
 	sz	: size	/* aligned size */
 	nper	: size	/* max number of elements per slab */
 	slabs	: slab#	/* partially filled or free slabs */
 	cache	: slab# /* cache of empty slabs, to prevent thrashing */
+	rest	: slab# /* full slabs */
 	ncache	: size  /* size of cache */
 ;;
 
@@ -68,9 +70,13 @@ type cacheelt = struct
 ;;
 
 const __init__ = {
-	for var i = 0; i < buckets.len && (Align << i) <= Bktmax; i++
-		bktinit(&buckets[i], Align << i)
-	;;
+	bktinit(&metabucket, sizeof(region))
+	top = (bktalloc(&metabucket) : region#)
+	top.region.vptr.init = bonwickinit
+	top.region.vptr.fini = bonwickfini
+	top.region.vptr.nextp = bonwicknext
+	top.region.data = b
+	bonwickinit(&b)
 }
 
 const startalloctrace = {path
@@ -122,12 +128,115 @@ const writealloctrace = {sl
 	write(tracefd, p[:len])
 }
 
+var top		: region#
+var metabucket	: bucket
+
+const bonwicknext = {a : void# -> void##
+	-> &a.next
+}
+
+const bonwickinit = {a : bonwick# -> void
+	for var i = 0; i < a.buckets.len && (Align << i) <= Bktmax; i++
+		bktinit(&a.buckets[i], Align << i)
+	;;
+	-> a
+}
+
+const bonwickfini = {a : bonwick# -> void
+	var b : bucket#
+	var t : slab#
+
+	for var i = 0; i < a.buckets.len; i++
+		if a.buckets[i].sz == 0
+			continue
+		;;
+
+		b = &a.buckets[i]
+		for s : [b.cache, b.slabs, b.rest][:]
+			while s != Zslab
+				t = s
+				s = s.next
+				freemem(t.head, Slabsz*2)
+			;;
+		;;
+	;;
+
+	for var i = 0; i < a.bigcache.len; i++
+		if a.bigcache[i].sz > 0
+			freemem(a.bigcache[i].p, a.bigcache[i].sz)
+		;;
+	;;
+
+	-> (a : byte#)
+}
+
+trait allocable @a =
+	vptr	: vtab#
+;;
+
+impl allocable bonwick# =
+	vptr	= &[
+		.fini	= bonwickfini,
+		.nextp	= bonwicknext,
+	]
+;;
+
+type vtab =  struct
+	fini	: (void# -> void)
+	nextp	: (void# -> void##)
+;;
+
+type region = struct
+	vptr	: vtab#
+	data	: void#
+;;
+
+type bonwick = struct
+	region	: region
+	buckets : bucket[32]
+	bigcache: cacheelt[32]
+;;
+
+generic escape = {f : (-> @a) -> @a
+	var r : region#
+	var p : region#
+	var v : @a
+
+	r = top
+	p = top.vptr.nextp(top.data)#
+	top = p != (0 : region#) ? p : top
+	v = f()
+	top = r
+	-> v
+}
+
+generic region = {a : @a, f : (@a -> @b) -> @b
+	var r : region#
+	var p : void#
+	var v : @b
+
+	p = (a : void#)
+	r.data = p
+	r.vptr = impl(vptr, @a)
+	r.vptr.nextp(p)# = (top : void#)
+	top = r
+
+	v = f(a)
+
+	top = r.vptr.nextp(p)#
+	r.vptr.fini(p)
+	-> v
+}
+
 /* Allocates a blob that is 'sz' bytes long. Dies if the allocation fails */
 const bytealloc = {sz
 	var bkt, p
+	var a : bonwick#
+
+	a = (top.data : bonwick#)
 
 	if sz <= Bktmax
-		bkt = &buckets[bktnum(sz)]
+		bkt = &a.buckets[bktnum(sz)]
 		lock(memlck)
 		p = bktalloc(bkt)
 		unlock(memlck)
@@ -145,6 +254,7 @@ const bytealloc = {sz
 /* frees a blob that is 'sz' bytes long. */
 const bytefree = {p, sz
 	var bkt
+	var a : bonwick#
 
 	if p == (0 : byte#)
 		-> void
@@ -156,7 +266,8 @@ const bytefree = {p, sz
 	;;
 	memfill(p, 0xa8, sz)
 	if (sz < Bktmax)
-		bkt = &buckets[bktnum(sz)]
+		a = (top.data : bonwick#)
+		bkt = &a.buckets[bktnum(sz)]
 		lock(memlck)
 		bktfree(bkt, p)
 		unlock(memlck)
@@ -166,8 +277,12 @@ const bytefree = {p, sz
 }
 
 const bigalloc = {sz
+	var bigcache
 	var p
+	var a : bonwick#
 
+	a = (top.data : bonwick#)
+	bigcache = a.bigcache[:]
 	p = Failmem
 	/*
 	 We need to round up to the page size so that unmapping
@@ -207,9 +322,13 @@ const bigalloc = {sz
 }
 
 const bigfree = {p, sz
+	var bigcache
 	var evictsz, evictp, evictidx
 	var endp, endblk
+	var a : bonwick#
 
+	a = (&top.data : bonwick#)
+	bigcache = a.bigcache[:]
 	sz = align(sz, Pagesz)
 	evictp = p
 	evictidx = -1
@@ -303,8 +422,18 @@ const mkslab = {bkt
 	off = align(sizeof(slab), Align)
 	bnext = nextchunk((s : chunk#), off)
 	s.freehd = bnext
+
+	if bkt.nper == 0
+		write(1, [('A' : byte), ('#' : byte), ('1' : byte), ('\n' : byte)][:])
+		suicide()
+	;;
+
 	for var i = 0; i < bkt.nper; i++
 		b = bnext
+		if bnext < (s : chunk#) || (bnext : size) > align((s : size)+1, Slabsz)
+			write(1, [('e' : byte), ('r' : byte), ('r' : byte), ('\n' : byte)][:])
+			suicide()
+		;;
 		bnext = nextchunk(b, bkt.sz)
 		b.next = bnext
 	;;
@@ -339,6 +468,9 @@ const bktalloc = {bkt
 		if s.next != Zslab
 			s.next.prev = Zslab
 		;;
+		s.next = bkt.rest
+		s.prev = Zslab
+		bkt.rest = s
 	;;
 	-> (c : byte#)
 }
@@ -356,6 +488,16 @@ const bktfree = {bkt, m
 	iassert(s.magic == 0xfee1baff1ed, "bad free")
 	c = (m : chunk#)
 	if s.nfree == 0
+		if s.next != Zslab
+			s.next.prev = s.prev
+		;;
+		if s.prev != Zslab
+			s.prev.next = s.next
+		;;
+		if bkt.rest == s
+			bkt.rest = s.next
+		;;
+
 		if bkt.slabs != Zslab
 			bkt.slabs.prev = s
 		;;
@@ -461,3 +603,16 @@ const mtrunc = {m, align
 	-> ((m : intptr) & ~((align : intptr) - 1) : byte#)
 }
 
+const dbg = {msg : byte[:], v
+	write(1, msg)
+	write(1, [(v%10+0x30 : byte)][:])
+	write(1, [((v/10)%10+0x30 : byte)][:])
+	write(1, [((v/100)%10+0x30 : byte)][:])
+	write(1, [((v/1000)%10+0x30 : byte)][:])
+	write(1, [((v/10000)%10+0x30 : byte)][:])
+	write(1, [((v/100000)%10+0x30 : byte)][:])
+	if v > 999999
+		write(1, [('x' : byte)][:])
+	;;;
+	write(1, [('\n' : byte)][:])
+}
