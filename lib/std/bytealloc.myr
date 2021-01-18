@@ -19,8 +19,8 @@ pkg std =
 	const zbytealloc	: (sz:size -> byte#)
 	const bytefree		: (m:byte#, sz:size -> void)
 
-	generic escape		: (f : (-> @a) ->  @a)
-	generic region		: (f : (-> @a) ->  @a)
+	generic escape		: (f : (-> @b) ->  @b)
+	generic region		: (a : @a, f : (a : @a -> @b) ->  @b)
 
 	/* null pointers. only used internally. */
 	pkglocal const Zslicep	= (0 : byte#)
@@ -70,13 +70,14 @@ type cacheelt = struct
 ;;
 
 const __init__ = {
+	var r : region#
+
 	bktinit(&metabucket, sizeof(region))
 	top = (bktalloc(&metabucket) : region#)
-	top.region.vptr.init = bonwickinit
-	top.region.vptr.fini = bonwickfini
-	top.region.vptr.nextp = bonwicknext
-	top.region.data = b
-	bonwickinit(&b)
+	top.vptr.fini = {a : void# -> void; bonwickfini((a : bonwick#))}
+	top.vptr.nextp = bonwicknext
+	top.data = (&base : void#)
+	bonwickinit(&base)
 }
 
 const startalloctrace = {path
@@ -130,16 +131,21 @@ const writealloctrace = {sl
 
 var top		: region#
 var metabucket	: bucket
+var base	: bonwick
 
 const bonwicknext = {a : void# -> void##
-	-> &a.next
+	var b : bonwick#
+	var r : region#
+	
+	b = (a : bonwick#)
+	r = &b.region
+	-> (&r.next : void##)
 }
 
 const bonwickinit = {a : bonwick# -> void
 	for var i = 0; i < a.buckets.len && (Align << i) <= Bktmax; i++
 		bktinit(&a.buckets[i], Align << i)
 	;;
-	-> a
 }
 
 const bonwickfini = {a : bonwick# -> void
@@ -166,8 +172,10 @@ const bonwickfini = {a : bonwick# -> void
 			freemem(a.bigcache[i].p, a.bigcache[i].sz)
 		;;
 	;;
+}
 
-	-> (a : byte#)
+const fini = {a : void# -> void 
+	bonwickfini((a : bonwick#))
 }
 
 trait allocable @a =
@@ -176,19 +184,20 @@ trait allocable @a =
 
 impl allocable bonwick# =
 	vptr	= &[
-		.fini	= bonwickfini,
+		.fini	= (0 : (a : void# -> void)),
 		.nextp	= bonwicknext,
 	]
 ;;
 
-type vtab =  struct
-	fini	: (void# -> void)
-	nextp	: (void# -> void##)
+type vtab = struct
+	fini	: (a : void# -> void)
+	nextp	: (a : void# -> void##)
 ;;
 
 type region = struct
 	vptr	: vtab#
 	data	: void#
+	next	: region#
 ;;
 
 type bonwick = struct
@@ -197,20 +206,20 @@ type bonwick = struct
 	bigcache: cacheelt[32]
 ;;
 
-generic escape = {f : (-> @a) -> @a
+generic escape = {f : (-> @b) -> @b
 	var r : region#
 	var p : region#
-	var v : @a
+	var v : @b
 
 	r = top
-	p = top.vptr.nextp(top.data)#
+	p = (top.vptr.nextp(top.data)# : region#)
 	top = p != (0 : region#) ? p : top
 	v = f()
 	top = r
 	-> v
 }
 
-generic region = {a : @a, f : (@a -> @b) -> @b
+generic region = {a : @a, f : (a : @a -> @b) -> @b
 	var r : region#
 	var p : void#
 	var v : @b
@@ -223,7 +232,7 @@ generic region = {a : @a, f : (@a -> @b) -> @b
 
 	v = f(a)
 
-	top = r.vptr.nextp(p)#
+	top = (r.vptr.nextp(p)# : region#)
 	r.vptr.fini(p)
 	-> v
 }

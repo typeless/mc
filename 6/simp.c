@@ -1588,6 +1588,7 @@ simpconstinit(Simp *s, Node *dcl)
 		lappend(&s->blobs, &s->nblobs, dcl);
 	} else if (e->expr.isconst) {
 		switch (exprop(e)) {
+		case Oaddr:
 		case Oarr:
 		case Ostruct:
 		case Oslice:
