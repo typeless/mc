@@ -1,0 +1,29 @@
+use std
+
+type File = void#
+
+extern const stdout : File
+
+extern const putchar : (c : int -> int)
+extern const fputs : (s : byte#, fp : File -> int)
+
+const put = {s : byte[:]
+	fputs(&s[0], stdout)
+}
+
+const foo = {x : int, y : int -> int32
+	var v = (1, 2, 3)
+	match v
+	| (1, 2, a):
+		-> ((x + a) : int32)
+	| (b, 5, 6):
+		-> ((b + y) : int32)
+	|_:
+		-> (x +y : int32)
+	;;
+}
+const main = {
+	var a = foo(200, 300)
+	put("hello\n")
+	std.put("x")
+}

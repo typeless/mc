@@ -76,6 +76,7 @@ void dumpcfg(Cfg *c, FILE *fd);
 void check(Cfg *cfg);
 
 /* pattern matching */
+Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
 void genmatch(Node *m, Node *val, Node ***out, size_t *nout);
 void genonematch(Node *pat, Node *val, Node *iftrue, Node *iffalse, Node ***out, size_t *nout, Node ***cap, size_t *ncap);
 
