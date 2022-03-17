@@ -235,6 +235,7 @@ emit_expr(FILE *fd, Node *n)
 		assert(n->expr.args[0]->expr.op == Ovar);
 		dcl = decls[n->expr.args[0]->expr.did];
 		nargs = n->expr.nargs;
+		fprintf(fd, "/*ns:%s %s*/\n", dcl->decl.name->name.ns, declname(dcl));
 		if (dcl->decl.name->name.ns) {
 			fprintf(fd, "%s$", dcl->decl.name->name.ns);
 		}
@@ -435,6 +436,348 @@ emit_fnval(FILE *fd, Node *n)
 	assert(n->expr.args[0]->type == Nlit);
 	assert(n->expr.args[0]->lit.littype == Lfunc);
 	emit_func(fd, n->expr.args[0]->lit.fnval);
+}
+
+static size_t tysize(Type *t);
+static size_t tyalign(Type *ty);
+
+static size_t
+alignto(size_t sz, Type *t)
+{
+	return align(sz, tyalign(t));
+}
+
+size_t
+size(Node *n)
+{
+	Type *t;
+
+	if (n->type == Nexpr)
+		t = n->expr.type;
+	else
+		t = n->decl.type;
+	return tysize(t);
+}
+
+static size_t
+tysize(Type *t)
+{
+	size_t sz;
+	size_t i;
+
+	sz = 0;
+	if (!t)
+		die("size of empty type => bailing.");
+	switch (t->type) {
+	case Tyvoid:
+		return 0;
+	case Tybool:
+	case Tyint8:
+	case Tybyte:
+	case Tyuint8:
+		return 1;
+	case Tyint16:
+	case Tyuint16:
+		return 2;
+	case Tyint:
+	case Tyint32:
+	case Tyuint:
+	case Tyuint32:
+	case Tychar: /* utf32 */
+		return 4;
+
+	case Typtr:
+	case Tyvalist: /* ptr to first element of valist */
+		return Ptrsz;
+
+	case Tyint64:
+	case Tyuint64:
+		return 8;
+
+		/*end integer types*/
+	case Tyflt32:
+		return 4;
+	case Tyflt64:
+		return 8;
+
+	case Tycode:
+		return Ptrsz;
+	case Tyfunc:
+		return 2 * Ptrsz;
+	case Tyslice:
+		return 2 * Ptrsz; /* len; ptr */
+	case Tyname:
+		return tysize(t->sub[0]);
+	case Tyarray:
+		if (!t->asize)
+			return 0;
+		t->asize = fold(t->asize, 1);
+		assert(exprop(t->asize) == Olit);
+		return t->asize->expr.args[0]->lit.intval * tysize(t->sub[0]);
+	case Tytuple:
+		for (i = 0; i < t->nsub; i++) {
+			sz = alignto(sz, t->sub[i]);
+			sz += tysize(t->sub[i]);
+		}
+		sz = alignto(sz, t);
+		return sz;
+		break;
+	case Tystruct:
+		for (i = 0; i < t->nmemb; i++) {
+			sz = alignto(sz, decltype(t->sdecls[i]));
+			sz += size(t->sdecls[i]);
+		}
+		sz = alignto(sz, t);
+		return sz;
+		break;
+	case Tyunion:
+		sz = Wordsz;
+		for (i = 0; i < t->nmemb; i++)
+			if (t->udecls[i]->etype)
+				sz = max(sz, tysize(t->udecls[i]->etype) + Wordsz);
+		return align(sz, tyalign(t));
+		break;
+	case Tygeneric:
+	case Tybad:
+	case Tyvar:
+	case Typaram:
+	case Tyunres:
+	case Ntypes:
+		die("Type %s does not have size; why did it get down to here?", tystr(t));
+		break;
+	}
+	return -1;
+}
+
+static size_t
+tyalign(Type *ty)
+{
+	size_t align, i;
+
+	align = 1;
+	ty = tybase(ty);
+	switch (ty->type) {
+	case Tyarray:
+		align = tyalign(ty->sub[0]);
+		break;
+	case Tytuple:
+		for (i = 0; i < ty->nsub; i++)
+			align = max(align, tyalign(ty->sub[i]));
+		break;
+	case Tyunion:
+		align = 4;
+		for (i = 0; i < ty->nmemb; i++)
+			if (ty->udecls[i]->etype)
+				align = max(align, tyalign(ty->udecls[i]->etype));
+		break;
+	case Tystruct:
+		for (i = 0; i < ty->nmemb; i++)
+			align = max(align, tyalign(decltype(ty->sdecls[i])));
+		break;
+	case Tyslice:
+		align = 8;
+		break;
+	default:
+		align = max(align, tysize(ty));
+	}
+	return min(align, Ptrsz);
+}
+
+static char *
+tydescid(char *buf, size_t bufsz, Type *ty)
+{
+	char *sep, *ns;
+	char *p, *end;
+	size_t i;
+
+	sep = "";
+	ns = "";
+	p = buf;
+	end = buf + bufsz;
+	ty = tydedup(ty);
+	if (ty->type == Tyname) {
+		if (ty->name->name.ns) {
+			ns = ty->name->name.ns;
+			sep = "$";
+		}
+		if (ty->vis != Visintern || ty->isimport)
+			p += bprintf(p, end - p, "_tydesc$%s%s%s", ns, sep, ty->name->name.name, ty->tid);
+		else
+			p += bprintf(p, end - p, "_tydesc$%s%s%s$%d", ns, sep, ty->name->name.name, ty->tid);
+		for (i = 0; i < ty->narg; i++)
+			p += tyidfmt(p, end - p, ty->arg[i]);
+	} else {
+		if (file.globls->name) {
+			ns = file.globls->name;
+			sep = "$";
+		}
+		bprintf(buf, bufsz, "_tydesc%s%s$%d", sep, ns, ty->tid);
+	}
+	return buf;
+}
+
+static void
+emit_typeinfo(FILE *fd, Type *ty)
+{
+	fprintf(fd, "%ld /* size */,", tysize(ty));
+	fprintf(fd, "%ld /* align */,", tyalign((ty)));
+}
+
+size_t
+emit_namevec(FILE *fd, Node *n)
+{
+	char *buf;
+	size_t i, len;
+
+	assert(n->type == Nname);
+
+	if (n->name.ns) {
+		len = strlen(n->name.name) + strlen(n->name.ns) + 1;
+		buf = xalloc(len + 1);
+		bprintf(buf, len + 1, "%s.%s", n->name.ns, n->name.name);
+	} else {
+		len = strlen(n->name.name);
+		buf = xalloc(len + 1);
+		bprintf(buf, len + 1, "%s", n->name.name);
+	}
+	fprintf(fd, "/* namevec */ %ld,", len);
+	for (i = 0; i < len; i++) {
+		fprintf(fd, "'%c',", buf[i]);
+	}
+	return len;
+}
+
+static void
+emit_tydescsub(FILE *fd, Type *ty)
+{
+	char buf[512];
+	Node *len;
+	size_t i;
+
+	switch (ty->type) {
+	case Ntypes:
+	case Tyvar:
+	case Tybad:
+	case Typaram:
+	case Tygeneric:
+	case Tycode:
+	case Tyunres:
+		die("invalid type in tydesc");
+		break;
+		/* atomic types -- nothing else to do */
+	case Tyvoid:
+	case Tychar:
+	case Tybool:
+	case Tyint8:
+	case Tyint16:
+	case Tyint:
+	case Tyint32:
+	case Tyint64:
+	case Tybyte:
+	case Tyuint8:
+	case Tyuint16:
+	case Tyuint:
+	case Tyuint32:
+	case Tyuint64:
+	case Tyflt32:
+	case Tyflt64:
+	case Tyvalist:
+		break;
+	case Typtr:
+		emit_tydescsub(fd, ty->sub[0]);
+		break;
+	case Tyslice:
+		emit_tydescsub(fd, ty->sub[0]);
+		break;
+	case Tyarray:
+		emit_typeinfo(fd, ty);
+		ty->asize = fold(ty->asize, 1);
+		len = ty->asize;
+		if (len) {
+			assert(len->type == Nexpr);
+			len = len->expr.args[0];
+			assert(len->type == Nlit && len->lit.littype == Lint);
+			fprintf(fd, "%lld /* len of array */, ", len->lit.intval);
+		} else {
+			fprintf(fd, "%d /* len of array */, ", 0);
+		}
+		emit_tydescsub(fd, ty->sub[0]);
+		break;
+	case Tyfunc:
+		fprintf(fd, "%ld /* arity of func */,", ty->nsub);
+		for (i = 0; i < ty->nsub; i++) {
+			emit_tydescsub(fd, ty->sub[i]);
+		}
+		break;
+	case Tytuple:
+		emit_typeinfo(fd, ty);
+		fprintf(fd, "%ld /* arity of tuple */,", ty->nsub);
+		for (i = 0; i < ty->nsub; i++) {
+			emit_tydescsub(fd, ty->sub[i]);
+		}
+		break;
+	case Tystruct:
+		emit_typeinfo(fd, ty);
+		fprintf(fd, "%ld /* nmemb of struct */,", ty->nmemb);
+		for (i = 0; i < ty->nmemb; i++) {
+			emit_namevec(fd, ty->sdecls[i]->decl.name);
+			emit_tydescsub(fd, ty->sdecls[i]->decl.type);
+		}
+		break;
+	case Tyunion:
+		emit_typeinfo(fd, ty);
+		fprintf(fd, "%ld /* nmemb of union */,", ty->nmemb);
+		for (i = 0; i < ty->nmemb; i++) {
+			emit_namevec(fd, ty->udecls[i]->name);
+			if (ty->udecls[i]->etype) {
+				emit_tydescsub(fd, ty->udecls[i]->etype);
+			} else {
+				fprintf(fd, "%d, ", 1);
+				fprintf(fd, "%d, ", Tybad);
+			}
+		}
+		break;
+	case Tyname:
+		i = bprintf(buf, sizeof buf, "%s", Symprefix);
+		tydescid(buf + i, sizeof buf - i, ty);
+		// lappend(&sub, &nsub, mkblobref(buf, 0, isextern));
+		fprintf(fd, "%s, %s, %s, %s, /*FIXME*/\n", buf, buf, buf, buf);
+		break;
+	}
+}
+
+static void
+emit_tydesc(FILE *fd, Type *ty)
+{
+	size_t sz;
+
+	if (ty->type == Tyname && hasparams(ty)) {
+		return;
+	}
+
+	fprintf(fd, "static const char _tydesc$%d[] = {", ty->tid);
+	if (ty->type == Tyname) {
+		// b = mkblobseq(NULL, 0);
+		// sz = mkblobi(Btimin, 0);
+		// sub = namedesc(ty);
+		// sz->ival = blobsz(sub);
+		// lappend(&b->seq.sub, &b->seq.nsub, sz);
+		// lappend(&b->seq.sub, &b->seq.nsub, sub);
+		// if (ty->vis != Visintern)
+		//	b->isglobl = 1;
+		if (ty->name->name.ns) {
+			sz = snprintf(NULL, 0, "%s.%s", ty->name->name.ns, ty->name->name.name);
+		} else {
+			sz = snprintf(NULL, 0, "%s", ty->name->name.name);
+		}
+		fprintf(fd, "%ld /* sz of _Ty%d*/, ", sz, ty->tid);
+		fprintf(fd, "%d,\n", Tyname);
+		sz = emit_namevec(fd, ty->name);
+		emit_tydescsub(fd, ty->sub[0]);
+	} else {
+		emit_tydescsub(fd, ty);
+	}
+	fprintf(fd, "}\n");
 }
 
 static void
@@ -793,6 +1136,33 @@ emit_includes(FILE *fd)
 	fprintf(fd, "\n");
 }
 
+static void
+gentype(FILE *fd, Type *ty)
+{
+	ty = tydedup(ty);
+	if (ty->type == Tyvar || ty->isemitted)
+		return;
+
+	ty->isemitted = 1;
+	emit_tydesc(fd, ty);
+}
+
+static void
+gentypes(FILE *fd)
+{
+	Type *ty;
+	size_t i;
+
+	for (i = Ntypes; i < ntypes; i++) {
+		if (!types[i]->isreflect)
+			continue;
+		ty = tydedup(types[i]);
+		if (ty->isemitted || ty->isimport)
+			continue;
+		gentype(fd, ty);
+	}
+}
+
 void
 genc(FILE *fd)
 {
@@ -807,6 +1177,8 @@ genc(FILE *fd)
 
 	emit_includes(fd);
 	emit_typedefs(fd);
+
+	gentypes(fd);
 
 	for (i = 0; i < file.nstmts; i++) {
 		n = file.stmts[i];
