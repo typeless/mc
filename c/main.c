@@ -56,8 +56,9 @@ usage(char *prog)
 }
 
 static void
-swapout(char* buf, size_t sz, char* suf) {
-	char* psuffix;
+swapout(char *buf, size_t sz, char *suf)
+{
+	char *psuffix;
 	psuffix = strrchr(outfile, '.');
 	if (psuffix != NULL)
 		swapsuffix(buf, sz, outfile, psuffix, suf);
@@ -140,9 +141,10 @@ genuse(char *path)
 int
 main(int argc, char **argv)
 {
-	char buf[1024];
+	char objfile[256];
+	char *psuffix;
 	Optctx ctx;
-	size_t i;
+	size_t i, j;
 
 	outfile = NULL;
 
@@ -209,10 +211,8 @@ main(int argc, char **argv)
 			dump(stdout);
 		loaduses();
 		if (hasmain()) {
-			genautocall(file.init, file.ninit,
-			    file.localinit, "__init__");
-			genautocall(file.fini, file.nfini,
-			    file.localfini, "__fini__");
+			genautocall(file.init, file.ninit, file.localinit, "__init__");
+			genautocall(file.fini, file.nfini, file.localfini, "__fini__");
 		}
 		infer();
 		tagexports(0);
@@ -221,11 +221,19 @@ main(int argc, char **argv)
 			dump(stdout);
 
 		if (outfile != NULL)
-			swapout(buf, sizeof buf, ".c");
-		else
-			swapsuffix(buf, sizeof buf, ctx.args[i], ".myr", ".c");
+			strncpy(objfile, outfile, sizeof(objfile));
+		else {
+			psuffix = strrchr(ctx.args[i], '+');
+			j = 0;
+			if (objdir)
+				j = bprintf(objfile, sizeof objfile, "%s/", objdir);
+			if (psuffix != NULL)
+				swapsuffix(objfile + j, sizeof objfile - j, ctx.args[i], psuffix, Objsuffix);
+			else
+				swapsuffix(objfile + j, sizeof objfile - j, ctx.args[i], ".myr", Objsuffix);
+		}
 		genuse(ctx.args[i]);
-		gen(buf);
+		gen(objfile);
 
 		free(localincpath);
 	}

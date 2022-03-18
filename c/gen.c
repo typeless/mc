@@ -45,14 +45,30 @@ initconsts(Htab *globls)
 	abortoob->expr.isconst = 1;
 }
 
-
 void
 gen(char *out)
 {
 	FILE *fd;
+	char buf[1024];
+	char *infile;
 
-	fd = fopen(out, "w");
+	swapsuffix(buf, sizeof buf, out, ".o", ".c");
+	fd = fopen(buf, "w");
 	if (!fd)
-		die("Couldn't open fd %s", out);
+		die("Couldn't open fd %s", buf);
+
+	infile = "-";
+	if (1)
+		infile = strdup(buf);
+
+	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", "-c -x c -g -o", out, infile);
+	fprintf(stderr, "cmd: %s\n", buf);
+	fd = popen(buf, "w");
+	if (!fd) {
+		die("Couldn't open fd %s", buf);
+	}
+
 	genc(fd);
+
+	pclose(fd);
 }

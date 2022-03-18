@@ -162,13 +162,7 @@ emit_expr(FILE *fd, Node *n)
 
 	args = n->expr.args;
 	switch (exprop(n)) {
-	case Ovar:
-		dcl = decls[n->expr.did];
-		if (dcl->decl.isextern) {
-			fprintf(fd, "%s /* did: %ld */", declname(dcl), dcl->decl.did);
-		} else {
-			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
-		}
+	case Oundef:
 		break;
 	case Olit:
 		switch (args[0]->lit.littype) {
@@ -220,15 +214,207 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "+");
 		emit_expr(fd, args[1]);
 		break;
-	case Ocast:
-		fprintf(fd, "((_Ty%d)(", exprtype(n)->tid);
-		emit_expr(fd, n->expr.args[0]);
-		fprintf(fd, "))");
+	case Osub:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "-");
+		emit_expr(fd, args[1]);
 		break;
-	case Oret:
-		fprintf(fd, "return ");
+	case Omul:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "*");
+		emit_expr(fd, args[1]);
+		break;
+	case Odiv:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "/");
+		emit_expr(fd, args[1]);
+		break;
+	case Omod:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "%%");
+		emit_expr(fd, args[1]);
+		break;
+	case Oneg:
+		fprintf(fd, "-");
+		emit_expr(fd, args[0]);
+		break;
+	case Obor:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "|");
+		emit_expr(fd, args[1]);
+		break;
+	case Oband:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "&");
+		emit_expr(fd, args[1]);
+		break;
+	case Obxor:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "^");
+		emit_expr(fd, args[1]);
+		break;
+	case Obsl:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "<<");
+		emit_expr(fd, args[1]);
+		break;
+	case Obsr:
+		emit_expr(fd, args[0]);
+		fprintf(fd, ">>");
+		emit_expr(fd, args[1]);
+		break;
+	case Obnot:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "~");
+		emit_expr(fd, args[1]);
+		break;
+	case Opreinc:
+		fprintf(fd, "++");
+		emit_expr(fd, args[0]);
+		break;
+	case Opostinc:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "++");
+		break;
+	case Opredec:
+		fprintf(fd, "--");
+		emit_expr(fd, args[0]);
+		break;
+	case Opostdec:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "--");
+		break;
+	case Oaddr:
+		fprintf(fd, "&");
 		emit_expr(fd, n->expr.args[0]);
-		fprintf(fd, ";");
+		break;
+	case Oderef:
+		fprintf(fd, "*");
+		emit_expr(fd, n->expr.args[0]);
+		break;
+	case Olor:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "||");
+		emit_expr(fd, args[1]);
+		break;
+	case Oland:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "&&");
+		emit_expr(fd, args[1]);
+		break;
+	case Olnot:
+		fprintf(fd, "!");
+		emit_expr(fd, args[0]);
+		break;
+	case Oeq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "==");
+		emit_expr(fd, args[1]);
+		break;
+	case One:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "!=");
+		emit_expr(fd, args[1]);
+		break;
+	case Ogt:
+		emit_expr(fd, args[0]);
+		fprintf(fd, ">");
+		emit_expr(fd, args[1]);
+		break;
+	case Oge:
+		emit_expr(fd, args[0]);
+		fprintf(fd, ">=");
+		emit_expr(fd, args[1]);
+		break;
+	case Olt:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "<");
+		emit_expr(fd, args[1]);
+		break;
+	case Ole:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "<=");
+		emit_expr(fd, args[1]);
+		break;
+	case Oasn:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "=");
+		emit_expr(fd, args[1]);
+		break;
+	case Oaddeq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "+=");
+		emit_expr(fd, args[1]);
+		break;
+	case Osubeq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "-=");
+		emit_expr(fd, args[1]);
+		break;
+	case Omuleq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "*=");
+		emit_expr(fd, args[1]);
+		break;
+	case Odiveq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "/=");
+		emit_expr(fd, args[1]);
+		break;
+	case Omodeq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "%%=");
+		emit_expr(fd, args[1]);
+		break;
+	case Oboreq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "|=");
+		emit_expr(fd, args[1]);
+		break;
+	case Obandeq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "&=");
+		emit_expr(fd, args[1]);
+		break;
+	case Obxoreq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "^=");
+		emit_expr(fd, args[1]);
+		break;
+	case Obsleq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, "<<=");
+		emit_expr(fd, args[1]);
+		break;
+	case Obsreq:
+		emit_expr(fd, args[0]);
+		fprintf(fd, ">>=");
+		emit_expr(fd, args[1]);
+		break;
+	case Oidx:
+		if (exprtype(n->expr.args[0])->type == Tyslice) {
+			emit_expr(fd, n->expr.args[0]);
+			fprintf(fd, ".p");
+		}
+		fprintf(fd, "[");
+		emit_expr(fd, n->expr.args[1]);
+		fprintf(fd, "]");
+		break;
+	case Oslice:
+		assert(0);
+		break;
+	case Omemb:
+		emit_expr(fd, args[0]);
+		fprintf(fd, ".");
+		emit_expr(fd, args[1]);
+		break;
+	case Otupmemb:
+		assert(0);
+		break;
+	case Osize:
+		fprintf(fd, "sizeof(");
+		emit_expr(fd, args[0]);
+		fprintf(fd, ")");
 		break;
 	case Ocall:
 		assert(n->expr.args[0]->type == Nexpr);
@@ -248,27 +434,39 @@ emit_expr(FILE *fd, Node *n)
 		}
 		fprintf(fd, ")");
 		break;
+	case Ocast:
+		fprintf(fd, "((_Ty%d)(", exprtype(n)->tid);
+		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, "))");
+		break;
+	case Oret:
+		fprintf(fd, "return ");
+		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, ";");
+		break;
+	case Ojmp:
+		assert(0);
+		break;
+	case Obreak:
+		assert(0);
+		break;
+	case Ocontinue:
+		assert(0);
+		break;
+	case Ovar:
+		dcl = decls[n->expr.did];
+		if (dcl->decl.isextern) {
+			fprintf(fd, "%s /* did: %ld */", declname(dcl), dcl->decl.did);
+		} else {
+			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
+		}
+		break;
 	case Otupget:
 		assert(n->expr.args[0]->type == Nexpr);
 		assert(n->expr.args[1]->expr.op == Olit);
 		assert(n->expr.args[1]->expr.args[0]->lit.littype == Lint);
 		fprintf(fd, "((_v%d).", n->expr.args[0]->nid);
 		fprintf(fd, "_%llu)", n->expr.args[1]->expr.args[0]->lit.intval);
-		break;
-	case Oasn:
-		break;
-	case Oaddr:
-		fprintf(fd, "&");
-		emit_expr(fd, n->expr.args[0]);
-		break;
-	case Oidx:
-		if (exprtype(n->expr.args[0])->type == Tyslice) {
-			emit_expr(fd, n->expr.args[0]);
-			fprintf(fd, ".p");
-		}
-		fprintf(fd, "[");
-		emit_expr(fd, n->expr.args[1]);
-		fprintf(fd, "]");
 		break;
 	default:;
 		fprintf(stderr, "op: %s\n", opstr[exprop(n)]);
@@ -1107,10 +1305,6 @@ emit_typedefs(FILE *fd)
 	fprintf(fd, "/* Ntypes: %d */\n", Ntypes);
 	for (i = 0; i < ntypes; i++) {
 		t = types[i];
-		if (tytab[t->tid] && t->type != Tyvar) {
-			fprintf(stderr, "TYPE %s -> %s reolve:%d\n", tytystr((t)), tytystr(tytab[t->tid]), t->resolved);
-			// assert(t->type == Tyvar);
-		}
 		if (!t->resolved) {
 			continue;
 		}
@@ -1205,6 +1399,4 @@ genc(FILE *fd)
 	popstab();
 
 	fprintf(fd, "\n");
-
-	fclose(fd);
 }
