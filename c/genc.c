@@ -457,7 +457,6 @@ emit_expr(FILE *fd, Node *n)
 	case Oret:
 		fprintf(fd, "return ");
 		emit_expr(fd, n->expr.args[0]);
-		fprintf(fd, ";");
 		break;
 	case Ojmp:
 		assert(0);
@@ -514,7 +513,7 @@ emit_objdecl(FILE *fd, Node *n)
 		fprintf(fd, " = ");
 		emit_expr(fd, n->decl.init);
 	}
-	fprintf(fd, "; /* %s */ \n", declname(n));
+	fprintf(fd, "; /* %s ****/ \n", declname(n));
 }
 
 static void
@@ -588,6 +587,7 @@ emit_stmt(FILE *fd, Node *n)
 
 	assert(n->type == Ndecl || n->type == Nexpr || n->type == Nifstmt || n->type == Nmatchstmt || n->type == Nloopstmt);
 
+	fprintf(fd, "/* ntype:%s */\n", nodestr[n->type]);
 	switch (n->type) {
 	case Ndecl:
 		emit_objdecl(fd, n);
@@ -1572,8 +1572,9 @@ genc(FILE *fd)
 
 	/* Output all function definitions */
 	for (i = 0; i < nfnvals; i++) {
-		assert(fnvals[i]->type == Nfunc);
-		fprintf(fd, "/* scan nid:%d */\n", fnvals[i]->nid);
+		Node *n = fnvals[i];
+		assert(n->type == Nfunc);
+		fprintf(fd, "/* nid:%d@%i */\n", n->nid, lnum(n->loc));
 		emit_fndef(fd, fnvals[i]);
 	}
 
