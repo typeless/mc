@@ -18,6 +18,10 @@
 #include "asm.h"
 #include "../config.h"
 
+/**
+ * We assume that every function literal is uniquely identified by its nid.
+ */
+
 #define Tdindirect 0x80
 
 static void emit_block(FILE *fd, Node *n);
@@ -166,6 +170,18 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Olit:
 		switch (args[0]->lit.littype) {
+		case Lchr:
+			fprintf(fd, "'%c'", args[0]->lit.chrval);
+			break;
+		case Lbool:
+			fprintf(fd, "%s", args[0]->lit.boolval ? "true" : "false");
+			break;
+		case Lint:
+			fprintf(fd, "%lld", args[0]->lit.intval);
+			break;
+		case Lflt:
+			fprintf(fd, "%f", args[0]->lit.fltval);
+			break;
 		case Lstr:
 			// fprintf(fd, "\"%.*s\"", (int)args[0]->lit.strval.len, args[0]->lit.strval.buf);
 			fprintf(fd, "(_Ty%d){\"", n->expr.type->tid);
@@ -179,24 +195,23 @@ emit_expr(FILE *fd, Node *n)
 			}
 			fprintf(fd, "\", %ld}", args[0]->lit.strval.len);
 			break;
-		case Lint:
-			fprintf(fd, "%lld", args[0]->lit.intval);
+		case Lfunc:
+			fprintf(fd, "(const uintptr_t[2]){");
+			fprintf(fd, "_v%d,", args[0]->lit.fnval->nid);
+			fprintf(fd, "0");
+			fprintf(fd, "}\n");
 			break;
-		case Lchr:
-			fprintf(fd, "'%c'", args[0]->lit.chrval);
+		case Llbl:
+			assert(0);
 			break;
-		case Lbool:
-			fprintf(fd, "%s", args[0]->lit.boolval ? "true" : "false");
-			break;
-		case Lflt:
-			fprintf(fd, "%f", args[0]->lit.fltval);
+		case Lvoid:
+			assert(0);
 			break;
 		default:
 			assert(0);
 		}
 		break;
 	case Otup:
-
 		fprintf(fd, "((_Ty%d) {", exprtype(n)->tid);
 		// fprintf(fd, "((");
 		// emit_type(fd, exprtype(n));
@@ -418,7 +433,7 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Ocall:
 		assert(n->expr.args[0]->type == Nexpr);
-		assert(n->expr.args[0]->expr.op == Ovar);
+		assert(n->expr.args[0]->expr.op == Ovar || n->expr.args[0]->expr.op == Olit);
 		dcl = decls[n->expr.args[0]->expr.did];
 		nargs = n->expr.nargs;
 		fprintf(fd, "/*ns:%s %s*/\n", dcl->decl.name->name.ns, declname(dcl));
@@ -978,16 +993,14 @@ emit_tydesc(FILE *fd, Type *ty)
 	fprintf(fd, "}\n");
 }
 
-static void
-genfuncdecl(FILE *fd, Node *n)
+void
+genfuncdecl(FILE *fd, Node *n, Node *init)
 {
 	Type *t;
-	Node *init;
 	Node **args, **env;
 	size_t nargs, nenv;
 
 	t = decltype(n);
-	init = n->decl.init;
 
 	assert(n->type == Ndecl);
 	assert(t->type == Tyfunc);
@@ -1053,6 +1066,79 @@ genfuncdecl(FILE *fd, Node *n)
 	} else {
 		fprintf(fd, ";\n");
 	}
+}
+
+static void
+emit_fnenvty(FILE *fd, Node *n)
+{
+	size_t nenv;
+	Node **env;
+
+	assert(n->type == Nfunc);
+
+	nenv = 0;
+	env = getclosure(n->func.scope, &nenv);
+	fprintf(fd, "/* nid:%d nenv:%ld */\n", n->nid, nenv);
+	if (nenv) {
+		fprintf(fd, "struct _envty$%d {\n", n->nid);
+		for (size_t i = 0; i < nenv; i++) {
+			Type *envty = decltype(env[i]);
+			fprintf(fd, "\t_Ty%d /* %s */ _v%ld /* %s */;\n", envty->tid, tystr(envty), env[i]->decl.did, declname(env[i]));
+		}
+		fprintf(fd, "};\n\n");
+	}
+}
+
+static void
+emit_fndef(FILE *fd, Node *n)
+{
+	Node **args, **env;
+	size_t nargs, nenv;
+	Type *t;
+
+	assert(n->type == Nfunc);
+
+	nenv = 0;
+	nargs = 0;
+	env = getclosure(n->func.scope, &nenv);
+	args = n->func.args;
+	nargs = n->func.nargs;
+	t = n->func.type;
+
+	fprintf(fd, "static ");
+	fprintf(fd, "_Ty%d\n", t->sub[0]->tid);
+	fprintf(fd, "_fn%d(", n->nid);
+
+	if (nenv > 0) {
+		fprintf(fd, "struct _envty$%d * $env%s", n->nid, nargs ? "," : "");
+	}
+
+	if (nenv == 0 && t->nsub == 1) {
+		fprintf(fd, "void");
+	} else {
+		for (size_t i = 1; i < t->nsub; i++) {
+			fprintf(fd, "_Ty%d ", t->sub[i]->tid);
+			if (i - 1 < nargs) {
+				Node *dcl = args[i - 1];
+				fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
+			}
+			if (i + 1 < t->nsub) {
+				fprintf(fd, ", ");
+			}
+		}
+	}
+
+	fprintf(fd, ")\n");
+
+	fprintf(fd, "{\n");
+
+	for (size_t i = 0; i < nenv; i++) {
+		Type *envty = decltype(env[i]);
+		fprintf(fd, "\t_Ty%d /* %s */ _v%ld = %s->_v%ld;\n", envty->tid, tystr(envty), env[i]->decl.did, "$env", env[i]->decl.did);
+	}
+
+	emit_func(fd, n);
+	fprintf(fd, "}\n\n");
 }
 
 __attribute__((unused)) static char *
@@ -1357,11 +1443,95 @@ gentypes(FILE *fd)
 	}
 }
 
+static void
+scan(Node ***fnvals, size_t *nfnval, Node *n, Bitset *visited)
+{
+	size_t i;
+	Node *init;
+
+	if (bshas(visited, n->nid)) {
+		return;
+	}
+	bsput(visited, n->nid);
+
+	switch (n->type) {
+	case Nblock:
+		for (i = 0; i < n->block.nstmts; i++) {
+			scan(fnvals, nfnval, n->block.stmts[i], visited);
+		}
+		break;
+	case Nloopstmt:
+		scan(fnvals, nfnval, n->loopstmt.init, visited);
+		scan(fnvals, nfnval, n->loopstmt.body, visited);
+		scan(fnvals, nfnval, n->loopstmt.step, visited);
+		scan(fnvals, nfnval, n->loopstmt.cond, visited);
+		break;
+	case Niterstmt:
+		scan(fnvals, nfnval, n->iterstmt.elt, visited);
+		scan(fnvals, nfnval, n->iterstmt.seq, visited);
+		scan(fnvals, nfnval, n->iterstmt.body, visited);
+		break;
+	case Nifstmt:
+		scan(fnvals, nfnval, n->ifstmt.cond, visited);
+		scan(fnvals, nfnval, n->ifstmt.iftrue, visited);
+		scan(fnvals, nfnval, n->ifstmt.iffalse, visited);
+		break;
+	case Nmatchstmt:
+		for (i = 0; i < n->matchstmt.nmatches; i++) {
+			scan(fnvals, nfnval, n->matchstmt.matches[i], visited);
+		}
+		break;
+	case Nexpr:
+		switch (exprop(n)) {
+		case Olit:
+			switch (n->expr.args[0]->lit.littype) {
+			case Lfunc:
+				scan(fnvals, nfnval, n->expr.args[0]->lit.fnval->func.body, visited);
+				lappend(fnvals, nfnval, n->expr.args[0]->lit.fnval);
+				break;
+			default:;
+			}
+			break;
+		case Ovar:
+			init = decls[n->expr.did]->decl.init;
+			if (init)
+				scan(fnvals, nfnval, init, visited);
+			break;
+		default:
+			for (size_t i = 0; i < n->expr.nargs; i++) {
+				scan(fnvals, nfnval, n->expr.args[i], visited);
+			}
+			break;
+		}
+		break;
+	case Ndecl:
+		scan(fnvals, nfnval, n->decl.init, visited);
+		break;
+	default:;
+	}
+}
+
+static ulong
+fnhash(void *p)
+{
+	return ((Node *)p)->nid * 366787;
+}
+
+static int
+fneq(void *a, void *b)
+{
+	return ((Node *)a)->nid == ((Node *)b)->nid;
+}
+
 void
 genc(FILE *fd)
 {
 	Node *n;
 	size_t i;
+	Node **fnvals;
+	size_t nfnvals;
+	Bitset *visited;
+	Htab *fndcl;
 
 	for (size_t i = 0; i < file.nfiles; i++) {
 		fprintf(fd, "/* Filename: %s */\n", file.files[i]);
@@ -1374,28 +1544,39 @@ genc(FILE *fd)
 
 	gentypes(fd);
 
+	fnvals = NULL;
+	nfnvals = 0;
+	visited = mkbs();
+	fndcl = mkht(fnhash, fneq);
 	for (i = 0; i < file.nstmts; i++) {
 		n = file.stmts[i];
-		switch (n->type) {
-		case Nuse: /* nothing to do */
-		case Nimpl:
-			break;
-		case Ndecl:
-			// n = flattenfn(n);
-			if (isconstfn(n)) {
-				if (!getenv("D"))
-					genfuncdecl(fd, n);
-				else
-					dumpn(n, stderr);
-			} else {
-				emit_objdecl(fd, n);
-			}
-			break;
-		default:
-			die("Bad node %s in toplevel", nodestr[n->type]);
-			break;
+		if (n->type != Ndecl)
+			continue;
+		if (isconstfn(n)) {
+			htput(fndcl, n->decl.init->expr.args[0]->lit.fnval, n);
+			scan(&fnvals, &nfnvals, n, visited);
+			// genfuncdecl(fd, n, n->decl.init);
+		} else {
+			emit_objdecl(fd, n);
 		}
 	}
+	htfree(fndcl);
+	bsfree(visited);
+
+	/* Output all struct defining func env */
+	for (i = 0; i < nfnvals; i++) {
+		assert(fnvals[i]->type == Nfunc);
+		fprintf(fd, "/* envty nid:%d */\n", fnvals[i]->nid);
+		emit_fnenvty(fd, fnvals[i]);
+	}
+
+	/* Output all function definitions */
+	for (i = 0; i < nfnvals; i++) {
+		assert(fnvals[i]->type == Nfunc);
+		fprintf(fd, "/* scan nid:%d */\n", fnvals[i]->nid);
+		emit_fndef(fd, fnvals[i]);
+	}
+
 	popstab();
 
 	fprintf(fd, "\n");

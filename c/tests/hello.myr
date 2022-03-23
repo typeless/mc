@@ -22,8 +22,15 @@ const foo = {x : int, y : int -> int32
 		-> (x +y : int32)
 	;;
 }
+
+const bar = {
+	var a = 12345
+	var b = 456
+	-> {;-> a + b }() + {; -> a * b}()
+}
+
 const main = {
 	var a = foo(200, 300)
-	//put("hello\n")
-	//std.put("x")
+	var b = 123
+	//var f = {; -> {;->b} }
 }
