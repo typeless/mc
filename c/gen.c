@@ -61,14 +61,19 @@ gen(char *out)
 	if (1)
 		infile = strdup(buf);
 
-	snprintf(buf, sizeof(buf), "tee out.c | %s %s %s %s", "cc", "-c -x c -g -o", out, infile);
-	fprintf(stderr, "cmd: %s\n", buf);
-	fd = popen(buf, "w");
-	if (!fd) {
-		die("Couldn't open fd %s", buf);
-	}
+	// snprintf(buf, sizeof(buf), "tee out.c | %s %s %s %s", "cc", "-c -x c -g -o", out, infile);
+	// fprintf(stderr, "cmd: %s\n", buf);
+	//  fd = popen(buf, "w");
+	//  if (!fd) {
+	//	die("Couldn't open fd %s", buf);
+	//  }
 
 	genc(fd);
+	fclose(fd);
 
-	pclose(fd);
+	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", "-c -x c -g -o", out, infile);
+	fprintf(stderr, "cmd: %s\n", buf);
+	system(buf);
+
+	// pclose(fd);
 }

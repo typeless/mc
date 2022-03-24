@@ -1371,7 +1371,11 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		for (i = 0; i < t->nmemb; i++) {
 			char *ns = t->udecls[i]->name->name.ns;
 			char *name = t->udecls[i]->name->name.name;
-			fprintf(fd, "_Ty%d %s%s%s;", t->udecls[i]->etype->tid, ns ? ns : "", ns ? "$" : "", name);
+			if (t->udecls[i]->etype) {
+				fprintf(fd, "_Ty%d %s%s%s;", t->udecls[i]->etype->tid, ns ? ns : "", ns ? "$" : "", name);
+			} else {
+				fprintf(fd, "/* no etype */\n");
+			}
 		}
 		fprintf(fd, "};");
 		fprintf(fd, "} _Ty%d;", t->tid);
