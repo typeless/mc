@@ -34,6 +34,7 @@ tysubst(Type *t)
 	}
 	return t;
 }
+static void emit_expr(FILE *fd, Node *n);
 
 static void
 emit_type(FILE *fd, Type *t)
@@ -156,10 +157,60 @@ emit_type(FILE *fd, Type *t)
 }
 
 static void
+emit_call(FILE *fd, Node *n)
+{
+	Node **env;
+	Node *dcl;
+	size_t nargs, nenv;
+	size_t i;
+
+	assert(n->type == Nexpr);
+	assert(n->expr.op == Ocall);
+	assert(n->expr.args[0]->type == Nexpr);
+	assert(n->expr.args[0]->expr.op == Ovar || n->expr.args[0]->expr.op == Olit);
+
+	nenv = 0;
+	nargs = 0;
+	if (n->expr.args[0]->expr.op == Olit) {
+		assert(n->expr.args[0]->type == Nexpr);
+		assert(n->expr.args[0]->expr.op == Olit);
+		assert(n->expr.args[0]->expr.args[0]->type == Nlit);
+		assert(n->expr.args[0]->expr.args[0]->lit.littype == Lfunc);
+		assert(n->expr.args[0]->expr.args[0]->lit.fnval->type == Nfunc);
+		fprintf(fd, "_fn%d", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
+
+		nargs = n->expr.args[0]->expr.args[0]->lit.fnval->func.nargs;
+		env = getclosure(n->expr.args[0]->expr.args[0]->lit.fnval->func.scope, &nenv);
+	} else if (n->expr.args[0]->expr.op == Ovar) {
+		dcl = decls[n->expr.args[0]->expr.did];
+		nargs = n->expr.nargs;
+		fprintf(fd, "/*ns:%s %s*/\n", dcl->decl.name->name.ns, declname(dcl));
+		if (dcl->decl.name->name.ns) {
+			fprintf(fd, "%s$", dcl->decl.name->name.ns);
+		}
+		fprintf(fd, "%s", declname(dcl));
+	}
+	fprintf(fd, "(");
+	if (nenv > 0) {
+		fprintf(fd, "&(struct _envty$%d){", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
+		for (i = 0; i < nenv; i++) {
+			fprintf(fd, "\t._v%ld = _v%ld,\n", env[i]->decl.did, env[i]->decl.did);
+		}
+		fprintf(fd, "}%s", nargs ? "," : "");
+	}
+	for (i = 1; i < nargs; i++) {
+		emit_expr(fd, n->expr.args[i]);
+		if (i + 1 < nargs) {
+			fprintf(fd, " ,");
+		}
+	}
+	fprintf(fd, ")");
+}
+
+static void
 emit_expr(FILE *fd, Node *n)
 {
 	Node **args;
-	size_t nargs;
 	Node *dcl;
 
 	assert(n->type == Nexpr);
@@ -432,22 +483,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, ")");
 		break;
 	case Ocall:
-		assert(n->expr.args[0]->type == Nexpr);
-		assert(n->expr.args[0]->expr.op == Ovar || n->expr.args[0]->expr.op == Olit);
-		dcl = decls[n->expr.args[0]->expr.did];
-		nargs = n->expr.nargs;
-		fprintf(fd, "/*ns:%s %s*/\n", dcl->decl.name->name.ns, declname(dcl));
-		if (dcl->decl.name->name.ns) {
-			fprintf(fd, "%s$", dcl->decl.name->name.ns);
-		}
-		fprintf(fd, "%s(", declname(dcl));
-		for (size_t i = 1; i < nargs; i++) {
-			emit_expr(fd, n->expr.args[i]);
-			if (i + 1 < nargs) {
-				fprintf(fd, " ,");
-			}
-		}
-		fprintf(fd, ")");
+		emit_call(fd, n);
 		break;
 	case Ocast:
 		fprintf(fd, "((_Ty%d)(", exprtype(n)->tid);

@@ -149,6 +149,7 @@ main(int argc, char **argv)
 	outfile = NULL;
 
 	optinit(&ctx, "cd:?hSo:I:9G:O:T", argv, argc);
+	sizefn = size;
 	while (!optdone(&ctx)) {
 		switch (optnext(&ctx)) {
 		case 'O':
