@@ -215,6 +215,7 @@ emit_expr(FILE *fd, Node *n)
 
 	assert(n->type == Nexpr);
 
+	fprintf(fd, "(");
 	args = n->expr.args;
 	switch (exprop(n)) {
 	case Oundef:
@@ -248,7 +249,7 @@ emit_expr(FILE *fd, Node *n)
 			break;
 		case Lfunc:
 			fprintf(fd, "(const uintptr_t[2]){");
-			fprintf(fd, "_v%d,", args[0]->lit.fnval->nid);
+			fprintf(fd, "_fn%d,", args[0]->lit.fnval->nid);
 			fprintf(fd, "0");
 			fprintf(fd, "}\n");
 			break;
@@ -522,6 +523,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(stderr, "op: %s\n", opstr[exprop(n)]);
 		assert(0);
 	}
+	fprintf(fd, ")");
 }
 
 static void
@@ -1026,7 +1028,7 @@ emit_tydesc(FILE *fd, Type *ty)
 	} else {
 		emit_tydescsub(fd, ty);
 	}
-	fprintf(fd, "}\n");
+	fprintf(fd, "};\n");
 }
 
 void
