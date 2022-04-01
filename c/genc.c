@@ -551,7 +551,7 @@ emit_objdecl(FILE *fd, Node *n)
 		fprintf(fd, " = ");
 		emit_expr(fd, n->decl.init);
 	}
-	fprintf(fd, "; /* %s ****/ \n", declname(n));
+	fprintf(fd, "; /* %s objdecl is_generic:%d ****/ \n", declname(n), n->decl.isgeneric);
 }
 
 static void
@@ -1594,6 +1594,9 @@ genc(FILE *fd)
 		n = file.stmts[i];
 		if (n->type != Ndecl)
 			continue;
+		if (n->decl.isextern || n->decl.isgeneric)
+			continue;
+
 		if (isconstfn(n)) {
 			htput(fndcl, n->decl.init->expr.args[0]->lit.fnval, n);
 			scan(&fnvals, &nfnvals, n, visited);
