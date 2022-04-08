@@ -548,7 +548,7 @@ classify(Type *t)
 	/* p must be of length exactly 2 */
 	PassIn pi[2] = { PassInNoPref, PassInNoPref };
 
-	if (tybase(t)->type == Tyvoid) {
+	if (tysize(t) == 0) {
 		return ArgVoid;
 	} else if (isstacktype(t)) {
 		if (isaggregate(t) && sz <= 16) {
