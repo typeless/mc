@@ -1,0 +1,12 @@
+/* test passing a struct containing void */
+
+type foo = struct
+	x : void
+;;
+
+const bar = {a : foo;}
+
+const main = {
+        var s : foo
+        bar(s)
+}
