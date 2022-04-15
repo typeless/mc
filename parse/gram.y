@@ -1142,9 +1142,9 @@ mangleautocall(Node *n, char *fn)
 	char name[1024];
 	char *p, *s;
 
-	if (strcmp(fn, "__init__") == 0)
+	if (strcmp(fn, "__init__") == 0 && !n->decl.isextern)
 		n->decl.isinit = 1;
-	else if (strcmp(fn, "__fini__") == 0)
+	else if (strcmp(fn, "__fini__") == 0 && !n->decl.isextern)
 		n->decl.isfini = 1;
 	else
 		return;

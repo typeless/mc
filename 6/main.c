@@ -167,7 +167,7 @@ hasmain(void)
 
 	name = mknsname(Zloc, NULL, "main");
 	n = getdcl(file.globls, name);
-	if (!n)
+	if (!n || n->decl.isextern)
 		return 0;
 	n = n->decl.name;
 	if (n->name.ns)

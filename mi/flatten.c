@@ -1109,7 +1109,7 @@ ismain(Node *n)
 	n = n->decl.name;
 	if (n->name.ns)
 		return 0;
-	return strcmp(n->name.name, "main") == 0;
+	return strcmp(n->name.name, "main") == 0 || strcmp(n->name.name, "region_main") == 0;
 }
 
 Node *
