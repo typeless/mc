@@ -1102,7 +1102,8 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 			}
 		}
 	}
-	fprintf(fd, "_Ty%d\n%s(", t->sub[0]->tid, declname(n));
+	fprintf(fd, "_Ty%d\n", t->sub[0]->tid);
+	fprintf(fd, "%s(", asmname(n));
 
 	/* Insert the parameter for closure env (which may be an empty struct) */
 	if (nenv == 0 && t->nsub == 1) {
@@ -1156,13 +1157,14 @@ emit_fnenvty(FILE *fd, Node *n)
 }
 
 static void
-emit_fndef(FILE *fd, Node *n)
+emit_fndef(FILE *fd, Node *n, Node *dcl)
 {
 	Node **args, **env;
 	size_t nargs, nenv;
 	Type *t;
 
 	assert(n->type == Nfunc);
+	assert(dcl == NULL || dcl->type == Ndecl);
 
 	nenv = 0;
 	nargs = 0;
@@ -1173,7 +1175,11 @@ emit_fndef(FILE *fd, Node *n)
 
 	fprintf(fd, "static ");
 	fprintf(fd, "_Ty%d\n", t->sub[0]->tid);
-	fprintf(fd, "_fn%d(", n->nid);
+
+	if (dcl)
+		fprintf(fd, "%s(", asmname(dcl));
+	else
+		fprintf(fd, "_fn%d(", n->nid);
 
 	if (nenv > 0) {
 		fprintf(fd, "struct _envty$%d * $env%s", n->nid, nargs ? "," : "");
@@ -1635,7 +1641,6 @@ genc(FILE *fd)
 			emit_objdecl(fd, n);
 		}
 	}
-	htfree(fndcl);
 	bsfree(visited);
 
 	/* Output all struct defining func env */
@@ -1647,13 +1652,16 @@ genc(FILE *fd)
 
 	/* Output all function definitions */
 	for (i = 0; i < nfnvals; i++) {
+		Node *dcl;
 		Node *n = fnvals[i];
 		assert(n->type == Nfunc);
+		dcl = htget(fndcl, n);
 		fprintf(fd, "/* nid:%d@%i */\n", n->nid, lnum(n->loc));
-		emit_fndef(fd, fnvals[i]);
+		emit_fndef(fd, fnvals[i], dcl);
 	}
 
 	popstab();
 
+	htfree(fndcl);
 	fprintf(fd, "\n");
 }
