@@ -18,6 +18,33 @@
 #include "asm.h"
 #include "../config.h"
 
+static char *
+asmname(Node *dcl)
+{
+	char buf[1024];
+	char *vis, *pf, *ns, *name, *sep;
+	Node *n;
+
+	n = dcl->decl.name;
+	pf = Symprefix;
+	ns = n->name.ns;
+	name = n->name.name;
+	vis = "";
+	sep = "";
+	//if (asmsyntax == Plan9)
+	//	if (islocal(dcl))
+	//		vis = "<>";
+	if (!ns || !ns[0])
+		ns = "";
+	else
+		sep = "$";
+	if (name[0] == '.')
+		pf = "";
+
+	bprintf(buf, sizeof buf, "%s%s%s%s%s", pf, ns, sep, name, vis);
+	return strdup(buf);
+}
+
 /**
  * We assume that every function literal is uniquely identified by its nid.
  */
@@ -185,10 +212,11 @@ emit_call(FILE *fd, Node *n)
 		dcl = decls[n->expr.args[0]->expr.did];
 		nargs = n->expr.nargs;
 		fprintf(fd, "/*ns:%s %s*/\n", dcl->decl.name->name.ns, declname(dcl));
-		if (dcl->decl.name->name.ns) {
-			fprintf(fd, "%s$", dcl->decl.name->name.ns);
-		}
-		fprintf(fd, "%s", declname(dcl));
+		//if (dcl->decl.name->name.ns) {
+		//	fprintf(fd, "%s$", dcl->decl.name->name.ns);
+		//}
+		//fprintf(fd, "%s", declname(dcl));
+		fprintf(fd, "%s", asmname(dcl));
 	}
 	fprintf(fd, "(");
 	for (i = 1; i < nargs; i++) {
