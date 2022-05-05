@@ -1173,7 +1173,14 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 	nargs = n->func.nargs;
 	t = n->func.type;
 
-	fprintf(fd, "static ");
+	if (!n->decl.isextern && n->decl.isglobl) {
+		if (n->decl.vis == Visintern) {
+			if (!streq(declname(n), "__init__") && !streq(declname(n), "__fini__") && !streq(declname(n), "main")) {
+				fprintf(fd, "static ");
+			}
+		}
+	}
+
 	fprintf(fd, "_Ty%d\n", t->sub[0]->tid);
 
 	if (dcl)
