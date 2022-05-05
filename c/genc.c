@@ -191,19 +191,20 @@ emit_call(FILE *fd, Node *n)
 		fprintf(fd, "%s", declname(dcl));
 	}
 	fprintf(fd, "(");
-	if (nenv > 0) {
-		fprintf(fd, "&(struct _envty$%d){", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
-		for (i = 0; i < nenv; i++) {
-			fprintf(fd, "\t._v%ld = _v%ld,\n", env[i]->decl.did, env[i]->decl.did);
-		}
-		fprintf(fd, "}%s", nargs ? "," : "");
-	}
 	for (i = 1; i < nargs; i++) {
 		emit_expr(fd, n->expr.args[i]);
 		if (i + 1 < nargs) {
 			fprintf(fd, " ,");
 		}
 	}
+	if (nenv > 0) {
+		fprintf(fd, "%s &(struct _envty$%d){", nargs > 0 ? "," : "", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
+		for (i = 0; i < nenv; i++) {
+			fprintf(fd, "\t._v%ld = _v%ld,\n", env[i]->decl.did, env[i]->decl.did);
+		}
+		fprintf(fd, "}");
+	}
+
 	fprintf(fd, ")");
 }
 
@@ -215,7 +216,6 @@ emit_expr(FILE *fd, Node *n)
 
 	assert(n->type == Nexpr);
 
-	fprintf(fd, "(");
 	args = n->expr.args;
 	switch (exprop(n)) {
 	case Oundef:
@@ -523,7 +523,6 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(stderr, "op: %s\n", opstr[exprop(n)]);
 		assert(0);
 	}
-	fprintf(fd, ")");
 }
 
 static void
