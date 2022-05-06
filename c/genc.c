@@ -292,10 +292,12 @@ emit_expr(FILE *fd, Node *n)
 		}
 		break;
 	case Otup:
-		fprintf(fd, "((_Ty%d) {", exprtype(n)->tid);
-		// fprintf(fd, "((");
-		// emit_type(fd, exprtype(n));
-		// fprintf(fd, ") {");
+	case Oarr:
+	case Ostruct:
+		fprintf(fd, "(");
+		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
+
+		fprintf(fd," {");
 		for (size_t i = 0; i < n->expr.nargs; i++) {
 			emit_expr(fd, n->expr.args[i]);
 			if (i + 1 < n->expr.nargs) {
@@ -496,7 +498,9 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "]");
 		break;
 	case Oslice:
-		assert(0);
+		fprintf(fd, "(_Ty%d){\"", n->expr.type->tid);
+		//fprintf(fd, "")	
+		fprintf(fd, "\", %ld}", args[0]->lit.strval.len);
 		break;
 	case Omemb:
 		emit_expr(fd, args[0]);
@@ -556,6 +560,7 @@ static void
 emit_objdecl(FILE *fd, Node *n)
 {
 	assert(n->type == Ndecl);
+	char name[256];
 
 	if (n->decl.isextern) {
 		fprintf(fd, "extern ");
@@ -567,17 +572,20 @@ emit_objdecl(FILE *fd, Node *n)
 		}
 	}
 
-	fprintf(fd, "_Ty%d ", decltype(n)->tid);
+	fprintf(fd, "_Ty%d ", tysearch(decltype(n))->tid);
 	if (n->decl.isextern) {
-		fprintf(fd, "%s", declname(n));
+		snprintf(name, sizeof(name), "%s", declname(n));
 	} else {
-		fprintf(fd, "_v%ld", n->decl.did);
+		snprintf(name, sizeof(name), "_v%ld", n->decl.did);
 	}
+	fprintf(fd, "%s;", name);
+	fprintf(fd, "/* %s objdecl is_generic:%d ****/ \n", declname(n), n->decl.isgeneric);
+
 	if (n->decl.init) {
-		fprintf(fd, " = ");
+		fprintf(fd, "%s = ", name);
 		emit_expr(fd, n->decl.init);
 	}
-	fprintf(fd, "; /* %s objdecl is_generic:%d ****/ \n", declname(n), n->decl.isgeneric);
+	fprintf(fd, ";\n");
 }
 
 static void
@@ -1371,14 +1379,14 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 	case Tyarray:
 		emit_typedef_rec(fd, t->sub[0], visited);
 
-		fprintf(fd, "typedef ");
-		fprintf(fd, "_Ty%d _Ty%d", t->sub[0]->tid, t->tid);
+		fprintf(fd, "typedef struct {");
+		fprintf(fd, "_Ty%d ", t->sub[0]->tid);
 		if (t->asize) {
-			fprintf(fd, "[%lld]", t->asize->expr.args[0]->lit.intval);
+			fprintf(fd, "elem[%lld];", t->asize->expr.args[0]->lit.intval);
 		} else {
-			fprintf(fd, "[]");
+			fprintf(fd, "elem[];");
 		}
-		fprintf(fd, ";");
+		fprintf(fd, "} _Ty%d;", t->tid);
 		break;
 	case Tytuple:
 		for (i = 0; i < t->nsub; i++) {

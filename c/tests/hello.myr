@@ -12,6 +12,7 @@ type File = void#
 //}
 
 const foo = {x : int, y : int -> int32
+	var xs : int[3] = [1, 2, 3]
 	var v = (1, 2, 3)
 	match v
 	| (1, 2, a):
