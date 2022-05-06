@@ -219,18 +219,18 @@ emit_call(FILE *fd, Node *n)
 		fprintf(fd, "%s", asmname(dcl));
 	}
 	fprintf(fd, "(");
-	for (i = 1; i < nargs; i++) {
-		emit_expr(fd, n->expr.args[i]);
-		if (i + 1 < nargs) {
-			fprintf(fd, " ,");
-		}
-	}
 	if (nenv > 0) {
 		fprintf(fd, "%s &(struct _envty$%d){", nargs > 0 ? "," : "", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
 		for (i = 0; i < nenv; i++) {
 			fprintf(fd, "\t._v%ld = _v%ld,\n", env[i]->decl.did, env[i]->decl.did);
 		}
-		fprintf(fd, "}");
+		fprintf(fd, "}%s", nargs ? "," : "");
+	}
+	for (i = 1; i < nargs; i++) {
+		emit_expr(fd, n->expr.args[i]);
+		if (i + 1 < nargs) {
+			fprintf(fd, " ,");
+		}
 	}
 
 	fprintf(fd, ")");
@@ -500,15 +500,14 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Omemb:
 		emit_expr(fd, args[0]);
-		fprintf(fd, ".");
-		emit_expr(fd, args[1]);
+		fprintf(fd, ".%s", namestr(args[1]));
 		break;
 	case Otupmemb:
 		assert(0);
 		break;
 	case Osize:
 		fprintf(fd, "sizeof(");
-		emit_expr(fd, args[0]);
+		fprintf(fd, "_Ty%d", args[0]->decl.type->tid);
 		fprintf(fd, ")");
 		break;
 	case Ocall:
@@ -1518,6 +1517,7 @@ gentypes(FILE *fd)
 	Type *ty;
 	size_t i;
 
+	fprintf(fd, "/* Type descriptors */\n");
 	for (i = Ntypes; i < ntypes; i++) {
 		if (!types[i]->isreflect)
 			continue;
@@ -1534,7 +1534,7 @@ scan(Node ***fnvals, size_t *nfnval, Node *n, Bitset *visited)
 	size_t i;
 	Node *init;
 
-	if (bshas(visited, n->nid)) {
+	if (n == NULL || bshas(visited, n->nid)) {
 		return;
 	}
 	bsput(visited, n->nid);

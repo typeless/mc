@@ -1,4 +1,4 @@
-use std
+use sys
 
 type File = void#
 
@@ -32,5 +32,6 @@ const bar = {
 const main = {
 	var a = foo(200, 300)
 	var b = 123
+	sys.write(2, "hello world\n")
 	//var f = {; -> {;->b} }
 }
