@@ -241,6 +241,7 @@ emit_expr(FILE *fd, Node *n)
 {
 	Node **args;
 	Node *dcl;
+	Ucon *uc;
 
 	assert(n->type == Nexpr);
 
@@ -303,6 +304,19 @@ emit_expr(FILE *fd, Node *n)
 			if (i + 1 < n->expr.nargs) {
 				fprintf(fd, ", ");
 			}
+		}
+		fprintf(fd, "})");
+		break;
+	case Oucon:
+		uc = finducon(tybase(exprtype(n)), n->expr.args[0]);
+		fprintf(fd, "(");
+		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
+		fprintf(fd," {");
+		fprintf(fd, "._utag = %ld,", uc->id);
+		if (n->expr.args[1]) {
+			fprintf(fd, "._udata = {");
+			emit_expr(fd, n->expr.args[1]);
+			fprintf(fd, "},");
 		}
 		fprintf(fd, "})");
 		break;
@@ -534,6 +548,14 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Ocontinue:
 		assert(0);
+		break;
+	case Outag:
+		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, "._utag");
+		break;
+	case Oudata:
+		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, "._udata");
 		break;
 	case Ovar:
 		dcl = decls[n->expr.did];
@@ -1417,8 +1439,8 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 			emit_typedef_rec(fd, t->udecls[i]->etype, visited);
 		}
 		fprintf(fd, "typedef struct {");
-		fprintf(fd, "uint32_t _tag;");
-		fprintf(fd, "union {");
+		fprintf(fd, "uint32_t _utag;");
+		fprintf(fd, "union _udata {");
 		for (i = 0; i < t->nmemb; i++) {
 			char *ns = t->udecls[i]->name->name.ns;
 			char *name = t->udecls[i]->name->name.name;
