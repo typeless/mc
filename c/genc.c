@@ -1325,6 +1325,35 @@ tytystr(Type *t)
 }
 
 static void
+emit_forward_decl_rec(FILE *fd, Type *t, Bitset *visited)
+{
+	Type *tn, *ts;
+	if (!t) {
+		return;
+	}
+
+	t = tysearch(t);
+	switch (t->type) {
+	case Typtr:
+		if (t->sub) {
+			tn = tysearch(t->sub[0]);
+			if (tn->type == Tyname) {
+				ts = tysearch(tn->sub[0]);
+				if (ts->type == Tystruct) {
+					fprintf(fd, "struct _Ty%d;\n", ts->tid);
+					fprintf(fd, "typedef struct _Ty%d _Ty%d;/*ty=%s -> %s*/\n", ts->tid, ts->tid, tytystr(ts), tytystr(ts));
+					fprintf(fd, "typedef _Ty%d _Ty%d;\n", ts->tid, tn->tid);
+					fprintf(fd, "typedef _Ty%d *_Ty%d; /*ty=%s -> %s*/\n", tn->tid, t->tid, tytystr(tn), tytystr(t));
+				}
+			}
+		}
+		break;
+	default:
+		;
+	}
+}
+
+static void
 emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 {
 	size_t i;
@@ -1336,12 +1365,11 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 	while (tytab[t->tid])
 		t = tytab[t->tid];
 
-	fprintf(fd, "/* tid: %d visited:%d type: %s %s */\n", t->tid, bshas(visited, t->tid), tytystr(t), tystr(t));
-
 	if (bshas(visited, t->tid)) {
 		return;
 	}
 	bsput(visited, t->tid);
+	fprintf(fd, "/* tid: %d visited:%d type: %s %s */\n", t->tid, bshas(visited, t->tid), tytystr(t), tystr(t));
 
 	switch (t->type) {
 	case Tyvoid:
@@ -1430,12 +1458,15 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		for (i = 0; i < t->nmemb; i++) {
 			emit_typedef_rec(fd, decltype(t->sdecls[i]), visited);
 		}
-		fprintf(fd, "typedef struct {");
+		//fprintf(fd, "typedef struct {");
+		fprintf(fd, "struct _Ty%d {", t->tid);
 		for (i = 0; i < t->nmemb; i++) {
 			fprintf(fd, "_Ty%d", decltype(t->sdecls[i])->tid);
 			fprintf(fd, " %s;", declname(t->sdecls[i]));
 		}
-		fprintf(fd, "} _Ty%d;", t->tid);
+		//fprintf(fd, "} _Ty%d;", t->tid);
+		fprintf(fd, "};\n");
+		fprintf(fd, "typedef struct _Ty%d _Ty%d;\n", t->tid, t->tid);
 		break;
 	case Tyunion:
 		for (i = 0; i < t->nmemb; i++) {
@@ -1474,12 +1505,14 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		break;
 	case Tyname:
 	case Tygeneric:
-		hasns = t->name->name.ns != NULL;
 		emit_typedef_rec(fd, t->sub[0], visited);
+
+		hasns = t->name->name.ns != NULL;
 		fprintf(fd, "typedef ");
 		// emit_type(fd, t->sub[0]);
 		//  fprintf(fd, " %s%s%s;\n", hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
 		fprintf(fd, "_Ty%d _Ty%d; /*%s%s%s*/", t->sub[0]->tid, t->tid, hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
+		//fprintf(fd, "struct { _Ty%d _; } _Ty%d ;; /*%s%s%s*/", t->sub[0]->tid, t->tid, hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
 		break;
 	case Typaram:
 		fprintf(fd, "typedef struct {}");
@@ -1511,6 +1544,15 @@ emit_typedefs(FILE *fd)
 		u = tytab[t->tid];
 		fprintf(fd, "/* type _Ty%d -> _Ty%d (ty=%d)*/\n", t->tid, u ? u->tid : -1, t->type);
 	}
+
+	fprintf(fd, "/* START OF FORWARD DECLARATIONS */\n");
+	for (i = 0; i < ntypes; i++) {
+		t = types[i];
+		emit_forward_decl_rec(fd, t, visited);
+	}
+	fprintf(fd, "/* END OF FORWARD DECLARATIONS */\n");
+
+	bsclear(visited);
 	for (i = 0; i < ntypes; i++) {
 		t = types[i];
 		if (!t->resolved) {
