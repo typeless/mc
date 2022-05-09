@@ -578,11 +578,11 @@ emit_objdecl(FILE *fd, Node *n)
 	} else {
 		snprintf(name, sizeof(name), "_v%ld", n->decl.did);
 	}
-	fprintf(fd, "%s;", name);
-	fprintf(fd, "/* %s objdecl is_generic:%d ****/ \n", declname(n), n->decl.isgeneric);
+	fprintf(fd, "%s", name);
+	//fprintf(fd, "/* %s objdecl is_generic:%d ****/ \n", declname(n), n->decl.isgeneric);
 
 	if (n->decl.init) {
-		fprintf(fd, "%s = ", name);
+		fprintf(fd, " = ");
 		emit_expr(fd, n->decl.init);
 	}
 	fprintf(fd, ";\n");
