@@ -1409,7 +1409,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		if (t->asize) {
 			fprintf(fd, "elem[%lld];", t->asize->expr.args[0]->lit.intval);
 		} else {
-			fprintf(fd, "elem[];");
+			fprintf(fd, "elem[0];");
 		}
 		fprintf(fd, "} _Ty%d;", t->tid);
 		break;
@@ -1443,7 +1443,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		}
 		fprintf(fd, "typedef struct {");
 		fprintf(fd, "uint32_t _utag;");
-		fprintf(fd, "union _udata {");
+		fprintf(fd, "union {");
 		for (i = 0; i < t->nmemb; i++) {
 			char *ns = t->udecls[i]->name->name.ns;
 			char *name = t->udecls[i]->name->name.name;
@@ -1453,7 +1453,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 				fprintf(fd, "/* no etype */");
 			}
 		}
-		fprintf(fd, "};");
+		fprintf(fd, "} _udata;");
 		fprintf(fd, "} _Ty%d;", t->tid);
 		break;
 	case Tyslice:
@@ -1499,13 +1499,18 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 static void
 emit_typedefs(FILE *fd)
 {
-	Type *t;
+	Type *t, *u;
 	Bitset *visited;
 	size_t i;
 
 	visited = mkbs();
 
 	fprintf(fd, "/* Ntypes: %d */\n", Ntypes);
+	for (i = 0; i < ntypes; i++) {
+		t = types[i];
+		u = tytab[t->tid];
+		fprintf(fd, "/* type _Ty%d -> _Ty%d (ty=%d)*/\n", t->tid, u ? u->tid : -1, t->type);
+	}
 	for (i = 0; i < ntypes; i++) {
 		t = types[i];
 		if (!t->resolved) {
