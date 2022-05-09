@@ -679,10 +679,13 @@ static void
 emit_stmt(FILE *fd, Node *n)
 {
 
-	assert(n->type == Ndecl || n->type == Nexpr || n->type == Nifstmt || n->type == Nmatchstmt || n->type == Nloopstmt);
+	assert(n->type == Nblock || n->type == Ndecl || n->type == Nexpr || n->type == Nifstmt || n->type == Nmatchstmt || n->type == Nloopstmt);
 
 	fprintf(fd, "/* ntype:%s */\n", nodestr[n->type]);
 	switch (n->type) {
+	case Nblock:
+		emit_block(fd, n);
+		break;
 	case Ndecl:
 		emit_objdecl(fd, n);
 		break;
@@ -690,10 +693,10 @@ emit_stmt(FILE *fd, Node *n)
 		fprintf(fd, "if (");
 		emit_expr(fd, n->ifstmt.cond);
 		fprintf(fd, ") {\n");
-		emit_block(fd, n->ifstmt.iftrue);
+		emit_stmt(fd, n->ifstmt.iftrue);
 		if (n->ifstmt.iffalse) {
 			fprintf(fd, "} else ");
-			emit_block(fd, n->ifstmt.iffalse);
+			emit_stmt(fd, n->ifstmt.iffalse);
 		}
 		fprintf(fd, "}");
 		break;
