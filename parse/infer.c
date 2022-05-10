@@ -1266,6 +1266,10 @@ unify(Node *ctx, Type *u, Type *v)
 		unify(ctx, htget(delayed, a), tybase(b));
 	}
 
+	if (a->type == Tyvar || tyeq(a, b)) {
+		tytab[a->tid] = b;
+	}
+
 	return r;
 }
 

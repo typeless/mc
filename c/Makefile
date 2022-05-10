@@ -1,5 +1,7 @@
 INSTBIN=cm
 OBJ= \
+	../6/typeinfo.o \
+	../6/blob.o \
 	gen.o \
 	genc.o \
 	main.o

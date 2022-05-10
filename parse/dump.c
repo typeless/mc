@@ -168,7 +168,7 @@ outnode(Node *n, FILE *fd, int depth)
 		tr = "";
 		if (n->decl.trait)
 			tr = namestr(n->decl.trait->name);
-		fprintf(fd, "(did = %zd, trait=%s, vis = %d)\n", n->decl.did, tr, n->decl.vis);
+		fprintf(fd, "(did = %zd, ty=%d tid=%d trait=%s, vis = %d)\n", n->decl.did, n->decl.type->type, n->decl.type->tid, tr, n->decl.vis);
 		findentf(fd, depth + 1, "isglobl=%d\n", n->decl.isglobl);
 		findentf(fd, depth + 1, "isconst=%d\n", n->decl.isconst);
 		findentf(fd, depth + 1, "isgeneric=%d\n", n->decl.isgeneric);

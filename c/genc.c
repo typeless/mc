@@ -18,7 +18,7 @@
 #include "asm.h"
 #include "../config.h"
 
-static char *
+char *
 asmname(Node *dcl)
 {
 	char buf[1024];
@@ -44,6 +44,13 @@ asmname(Node *dcl)
 	bprintf(buf, sizeof buf, "%s%s%s%s%s", pf, ns, sep, name, vis);
 	return strdup(buf);
 }
+
+char *
+genlocallblstr(char *buf, size_t sz)
+{
+	return genlblstr(buf, 128, "");
+}
+
 
 /**
  * We assume that every function literal is uniquely identified by its nid.
@@ -751,22 +758,10 @@ emit_fnval(FILE *fd, Node *n)
 static size_t tysize(Type *t);
 static size_t tyalign(Type *ty);
 
-static size_t
+size_t
 alignto(size_t sz, Type *t)
 {
 	return align(sz, tyalign(t));
-}
-
-size_t
-size(Node *n)
-{
-	Type *t;
-
-	if (n->type == Nexpr)
-		t = n->expr.type;
-	else
-		t = n->decl.type;
-	return tysize(t);
 }
 
 static size_t
@@ -893,7 +888,7 @@ tyalign(Type *ty)
 	return min(align, Ptrsz);
 }
 
-static char *
+char *
 tydescid(char *buf, size_t bufsz, Type *ty)
 {
 	char *sep, *ns;
@@ -921,173 +916,9 @@ tydescid(char *buf, size_t bufsz, Type *ty)
 			ns = file.globls->name;
 			sep = "$";
 		}
-		bprintf(buf, bufsz, "_tydesc%s%s$%d", sep, ns, ty->tid);
+		bprintf(buf, bufsz, "_tydesc%s%s$%d",sep, ns, ty->tid);
 	}
 	return buf;
-}
-
-static void
-emit_typeinfo(FILE *fd, Type *ty)
-{
-	fprintf(fd, "%ld /* size */,", tysize(ty));
-	fprintf(fd, "%ld /* align */,", tyalign((ty)));
-}
-
-size_t
-emit_namevec(FILE *fd, Node *n)
-{
-	char *buf;
-	size_t i, len;
-
-	assert(n->type == Nname);
-
-	if (n->name.ns) {
-		len = strlen(n->name.name) + strlen(n->name.ns) + 1;
-		buf = xalloc(len + 1);
-		bprintf(buf, len + 1, "%s.%s", n->name.ns, n->name.name);
-	} else {
-		len = strlen(n->name.name);
-		buf = xalloc(len + 1);
-		bprintf(buf, len + 1, "%s", n->name.name);
-	}
-	fprintf(fd, "/* namevec */ %ld,", len);
-	for (i = 0; i < len; i++) {
-		fprintf(fd, "'%c',", buf[i]);
-	}
-	return len;
-}
-
-static void
-emit_tydescsub(FILE *fd, Type *ty)
-{
-	char buf[512];
-	Node *len;
-	size_t i;
-
-	switch (ty->type) {
-	case Ntypes:
-	case Tyvar:
-	case Tybad:
-	case Typaram:
-	case Tygeneric:
-	case Tycode:
-	case Tyunres:
-		die("invalid type in tydesc");
-		break;
-		/* atomic types -- nothing else to do */
-	case Tyvoid:
-	case Tychar:
-	case Tybool:
-	case Tyint8:
-	case Tyint16:
-	case Tyint:
-	case Tyint32:
-	case Tyint64:
-	case Tybyte:
-	case Tyuint8:
-	case Tyuint16:
-	case Tyuint:
-	case Tyuint32:
-	case Tyuint64:
-	case Tyflt32:
-	case Tyflt64:
-	case Tyvalist:
-		break;
-	case Typtr:
-		emit_tydescsub(fd, ty->sub[0]);
-		break;
-	case Tyslice:
-		emit_tydescsub(fd, ty->sub[0]);
-		break;
-	case Tyarray:
-		emit_typeinfo(fd, ty);
-		ty->asize = fold(ty->asize, 1);
-		len = ty->asize;
-		if (len) {
-			assert(len->type == Nexpr);
-			len = len->expr.args[0];
-			assert(len->type == Nlit && len->lit.littype == Lint);
-			fprintf(fd, "%lld /* len of array */, ", len->lit.intval);
-		} else {
-			fprintf(fd, "%d /* len of array */, ", 0);
-		}
-		emit_tydescsub(fd, ty->sub[0]);
-		break;
-	case Tyfunc:
-		fprintf(fd, "%ld /* arity of func */,", ty->nsub);
-		for (i = 0; i < ty->nsub; i++) {
-			emit_tydescsub(fd, ty->sub[i]);
-		}
-		break;
-	case Tytuple:
-		emit_typeinfo(fd, ty);
-		fprintf(fd, "%ld /* arity of tuple */,", ty->nsub);
-		for (i = 0; i < ty->nsub; i++) {
-			emit_tydescsub(fd, ty->sub[i]);
-		}
-		break;
-	case Tystruct:
-		emit_typeinfo(fd, ty);
-		fprintf(fd, "%ld /* nmemb of struct */,", ty->nmemb);
-		for (i = 0; i < ty->nmemb; i++) {
-			emit_namevec(fd, ty->sdecls[i]->decl.name);
-			emit_tydescsub(fd, ty->sdecls[i]->decl.type);
-		}
-		break;
-	case Tyunion:
-		emit_typeinfo(fd, ty);
-		fprintf(fd, "%ld /* nmemb of union */,", ty->nmemb);
-		for (i = 0; i < ty->nmemb; i++) {
-			emit_namevec(fd, ty->udecls[i]->name);
-			if (ty->udecls[i]->etype) {
-				emit_tydescsub(fd, ty->udecls[i]->etype);
-			} else {
-				fprintf(fd, "%d, ", 1);
-				fprintf(fd, "%d, ", Tybad);
-			}
-		}
-		break;
-	case Tyname:
-		i = bprintf(buf, sizeof buf, "%s", Symprefix);
-		tydescid(buf + i, sizeof buf - i, ty);
-		// lappend(&sub, &nsub, mkblobref(buf, 0, isextern));
-		fprintf(fd, "%s, %s, %s, %s, /*FIXME*/\n", buf, buf, buf, buf);
-		break;
-	}
-}
-
-static void
-emit_tydesc(FILE *fd, Type *ty)
-{
-	size_t sz;
-
-	if (ty->type == Tyname && hasparams(ty)) {
-		return;
-	}
-
-	fprintf(fd, "static const char _tydesc$%d[] = {", ty->tid);
-	if (ty->type == Tyname) {
-		// b = mkblobseq(NULL, 0);
-		// sz = mkblobi(Btimin, 0);
-		// sub = namedesc(ty);
-		// sz->ival = blobsz(sub);
-		// lappend(&b->seq.sub, &b->seq.nsub, sz);
-		// lappend(&b->seq.sub, &b->seq.nsub, sub);
-		// if (ty->vis != Visintern)
-		//	b->isglobl = 1;
-		if (ty->name->name.ns) {
-			sz = snprintf(NULL, 0, "%s.%s", ty->name->name.ns, ty->name->name.name);
-		} else {
-			sz = snprintf(NULL, 0, "%s", ty->name->name.name);
-		}
-		fprintf(fd, "%ld /* sz of _Ty%d*/, ", sz, ty->tid);
-		fprintf(fd, "%d,\n", Tyname);
-		sz = emit_namevec(fd, ty->name);
-		emit_tydescsub(fd, ty->sub[0]);
-	} else {
-		emit_tydescsub(fd, ty);
-	}
-	fprintf(fd, "};\n");
 }
 
 void
@@ -1580,15 +1411,133 @@ emit_includes(FILE *fd)
 	fprintf(fd, "\n");
 }
 
+static size_t
+encodemin(FILE *fd, uvlong val)
+{
+	size_t i, shift, bytes;
+	uint8_t b;
+
+	if (fd)
+		fprintf(fd, "{");
+
+	if (val < 128) {
+		if (fd)
+			fprintf(fd, " %lld,", val);
+		return 1;
+	}
+
+	for (i = 1; i < 8; i++)
+		if (val < 1ULL << (7*i))
+			break;
+	shift = 8 - i;
+	b = ~0ull << (shift + 1);
+	b |= val & ~(~0ull << shift);
+	bytes = 1;
+	if (fd)
+		fprintf(fd, " %02x,", b);
+	val >>=  shift;
+	while (val != 0) {
+		if(fd)
+			fprintf(fd, " %02x,\n", (uint)val & 0xff);
+		val >>= 8;
+		bytes++;
+	}
+
+	if (fd)
+		fprintf(fd, "},");
+
+	return bytes;
+}
+
+static void
+writeblob_struct(FILE *fd, Blob *b, size_t id)
+{
+	size_t i;
+
+	if (!b)
+		return;
+	switch (b->type) {
+	case Btimin:	fprintf(fd, "\tuint8_t _v%ld[%ld];\n", id, encodemin(NULL, b->ival)); break;
+	case Bti8:	fprintf(fd, "\tuint8_t _v%ld;\n", id);	break;
+	case Bti16:	fprintf(fd, "\tuint16_t _v%ld;\n", id);	break;
+	case Bti32:	fprintf(fd, "\tuint32_t _v%ld;\n", id);	break;
+	case Bti64:	fprintf(fd, "\tuint64_t _v%ld;\n", id);	break;
+	case Btbytes:	fprintf(fd, "\tuint8_t _v%ld[%ld];", id, b->bytes.len);	break;
+	case Btpad:	fprintf(fd, "\tuint8_t  _pad%ld[%lld];\n", id, b->npad);	break;
+	case Btref:	fprintf(fd, "\tvoid * _ref%ld;\n", id);	break;
+	case Btseq:
+		for (i = 0; i < b->seq.nsub; i++)
+			writeblob_struct(fd, b->seq.sub[i], id+i);
+		break;
+	}
+}
+
+static void
+writebytes(FILE *fd, char *p, size_t sz)
+{
+	size_t i;
+
+	fprintf(fd, "{");
+	for (i = 0; i < sz; i++) {
+		if (isprint(p[i]))
+			fprintf(fd, " '%c',", p[i]);
+		else
+			fprintf(fd, " \\%03o,", (uint8_t)p[i] & 0xff);
+		/* line wrapping for readability */
+		if (i % 60 == 59 || i == sz - 1)
+			fprintf(fd, "\"\n");
+	}
+	fprintf(fd, "},");
+}
+
+static void
+writeblob(FILE *fd, Blob *b)
+{
+	size_t i;
+
+	if (!b)
+		return;
+	switch (b->type) {
+	case Btimin:	encodemin(fd, b->ival);	break;
+	case Bti8:	fprintf(fd, "\t.byte %llu\n", b->ival);	break;
+	case Bti16:	fprintf(fd, "\t.short %llu\n", b->ival);	break;
+	case Bti32:	fprintf(fd, "\t.long %llu\n", b->ival);	break;
+	case Bti64:	fprintf(fd, "\t.quad %llu\n", b->ival);	break;
+	case Btbytes:	writebytes(fd, b->bytes.buf, b->bytes.len);	break;
+	case Btpad:	fprintf(fd, "\t.fill %llu,1,0\n", b->npad);	break;
+	case Btref:	fprintf(fd, "\t.quad %s + %zd\n", b->ref.str, b->ref.off);	break;
+	case Btseq:
+		for (i = 0; i < b->seq.nsub; i++)
+			writeblob(fd, b->seq.sub[i]);
+		break;
+	}
+}
+
 static void
 gentype(FILE *fd, Type *ty)
 {
+	Blob *b;
+	size_t blob_id;
+
 	ty = tydedup(ty);
 	if (ty->type == Tyvar || ty->isemitted)
 		return;
 
 	ty->isemitted = 1;
-	emit_tydesc(fd, ty);
+	b = tydescblob(ty);
+	if (b->isglobl)
+		b->iscomdat = 1;
+	//if (asmsyntax == Gnugaself)
+	//	fprintf(fd, ".section .data.%s,\"aw\",@progbits\n", b->lbl);
+	
+	blob_id = 0;
+	fprintf(fd, "static const struct {\n");
+	writeblob_struct(fd, b, blob_id);
+	fprintf(fd, "} = {\n");
+	writeblob(fd, b);
+	fprintf(fd, "};");
+
+	blobfree(b);
 }
 
 static void
@@ -1597,7 +1546,6 @@ gentypes(FILE *fd)
 	Type *ty;
 	size_t i;
 
-	fprintf(fd, "/* Type descriptors */\n");
 	for (i = Ntypes; i < ntypes; i++) {
 		if (!types[i]->isreflect)
 			continue;
@@ -1606,6 +1554,7 @@ gentypes(FILE *fd)
 			continue;
 		gentype(fd, ty);
 	}
+	fprintf(fd, "\n");
 }
 
 static void
