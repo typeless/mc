@@ -1422,7 +1422,7 @@ encodemin(FILE *fd, uvlong val)
 
 	if (val < 128) {
 		if (fd)
-			fprintf(fd, " %lld,", val);
+			fprintf(fd, " %lld},", val);
 		return 1;
 	}
 
@@ -1434,11 +1434,11 @@ encodemin(FILE *fd, uvlong val)
 	b |= val & ~(~0ull << shift);
 	bytes = 1;
 	if (fd)
-		fprintf(fd, " %02x,", b);
+		fprintf(fd, " 0x%02x,", b);
 	val >>=  shift;
 	while (val != 0) {
 		if(fd)
-			fprintf(fd, " %02x,\n", (uint)val & 0xff);
+			fprintf(fd, " 0x%02x,\n", (uint)val & 0xff);
 		val >>= 8;
 		bytes++;
 	}
@@ -1485,7 +1485,7 @@ writebytes(FILE *fd, char *p, size_t sz)
 			fprintf(fd, " \\%03o,", (uint8_t)p[i] & 0xff);
 		/* line wrapping for readability */
 		if (i % 60 == 59 || i == sz - 1)
-			fprintf(fd, "\"\n");
+			fprintf(fd, "\n");
 	}
 	fprintf(fd, "},");
 }
@@ -1499,13 +1499,13 @@ writeblob(FILE *fd, Blob *b)
 		return;
 	switch (b->type) {
 	case Btimin:	encodemin(fd, b->ival);	break;
-	case Bti8:	fprintf(fd, "\t.byte %llu\n", b->ival);	break;
-	case Bti16:	fprintf(fd, "\t.short %llu\n", b->ival);	break;
-	case Bti32:	fprintf(fd, "\t.long %llu\n", b->ival);	break;
-	case Bti64:	fprintf(fd, "\t.quad %llu\n", b->ival);	break;
+	case Bti8:	fprintf(fd, " 0x%02llx,\n", b->ival);	break;
+	case Bti16:	fprintf(fd, " 0x%04llx,\n", b->ival);	break;
+	case Bti32:	fprintf(fd, " 0x%08llx,\n", b->ival);	break;
+	case Bti64:	fprintf(fd, " 0x%016llx,\n", b->ival);	break;
 	case Btbytes:	writebytes(fd, b->bytes.buf, b->bytes.len);	break;
-	case Btpad:	fprintf(fd, "\t.fill %llu,1,0\n", b->npad);	break;
-	case Btref:	fprintf(fd, "\t.quad %s + %zd\n", b->ref.str, b->ref.off);	break;
+	case Btpad:	fprintf(fd, " {0,},\n");	break;
+	case Btref:	fprintf(fd, " %s + %zd\n", b->ref.str, b->ref.off);	break;
 	case Btseq:
 		for (i = 0; i < b->seq.nsub; i++)
 			writeblob(fd, b->seq.sub[i]);
@@ -1518,6 +1518,7 @@ gentype(FILE *fd, Type *ty)
 {
 	Blob *b;
 	size_t blob_id;
+	char buf[512];
 
 	ty = tydedup(ty);
 	if (ty->type == Tyvar || ty->isemitted)
@@ -1533,9 +1534,9 @@ gentype(FILE *fd, Type *ty)
 	blob_id = 0;
 	fprintf(fd, "static const struct {\n");
 	writeblob_struct(fd, b, blob_id);
-	fprintf(fd, "} = {\n");
+	fprintf(fd, "} %s = {\n", tydescid(buf, sizeof buf, ty));
 	writeblob(fd, b);
-	fprintf(fd, "};");
+	fprintf(fd, "};\n");
 
 	blobfree(b);
 }
