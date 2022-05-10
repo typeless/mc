@@ -534,7 +534,7 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Omemb:
 		emit_expr(fd, args[0]);
-		fprintf(fd, ".%s", namestr(args[1]));
+		fprintf(fd, "%s%s", args[0]->expr.type->type == Typtr ? "->" : ".", namestr(args[1]));
 		break;
 	case Otupmemb:
 		assert(0);
@@ -608,6 +608,10 @@ emit_objdecl(FILE *fd, Node *n)
 		if (n->decl.vis == Visintern || n->decl.vis == Vishidden) {
 			fprintf(fd, "static ");
 		}
+	}
+
+	if (n->decl.isconst) {
+		fprintf(fd, "const ");
 	}
 
 	fprintf(fd, "_Ty%d ", tysearch(decltype(n))->tid);
