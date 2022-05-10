@@ -18,6 +18,15 @@
 #include "asm.h"
 #include "../config.h"
 
+/**
+ * Conventions:
+ * 1. Types are named '_Ty{tid}'
+ * 2. Struct types of type descriptors are named '_Tydesc{tid}'
+ * 3. Symbol names of type descriptors are named by tydescid()
+ * 4. Variables are named '_v{did}'
+ * 5. function literals are named '_fn{lit.fnval->nid}'
+ */
+
 char *
 asmname(Node *dcl)
 {
@@ -1532,7 +1541,7 @@ gentype(FILE *fd, Type *ty)
 	//	fprintf(fd, ".section .data.%s,\"aw\",@progbits\n", b->lbl);
 	
 	blob_id = 0;
-	fprintf(fd, "static const struct {\n");
+	fprintf(fd, "const struct _Tydesc%d {\n", ty->tid);
 	writeblob_struct(fd, b, &blob_id);
 	fprintf(fd, "} %s = {\n", tydescid(buf, sizeof buf, ty));
 	writeblob(fd, b);
@@ -1546,6 +1555,17 @@ gentypes(FILE *fd)
 {
 	Type *ty;
 	size_t i;
+	char buf[512];
+
+	/* Forward declarations */
+	for (i = Ntypes; i < ntypes; i++) {
+		if (!types[i]->isreflect)
+			continue;
+		ty = tydedup(types[i]);
+		if (ty->isemitted || ty->isimport)
+			continue;
+		fprintf(fd, "extern const struct _Tydesc%d %s;\n", ty->tid, tydescid(buf, sizeof buf, ty));
+	}
 
 	for (i = Ntypes; i < ntypes; i++) {
 		if (!types[i]->isreflect)
