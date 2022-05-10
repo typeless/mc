@@ -54,6 +54,36 @@ asmname(Node *dcl)
 	return strdup(buf);
 }
 
+static void
+fillglobls(Stab *st, Htab *globls)
+{
+	size_t i, j, nk, nns;
+	void **k, **ns;
+	Stab *stab;
+	Node *s;
+
+	k = htkeys(st->dcl, &nk);
+	for (i = 0; i < nk; i++) {
+		s = htget(st->dcl, k[i]);
+		//if (isconstfn(s))
+		//	s->decl.type = codetype(s->decl.type);
+		htput(globls, s, asmname(s));
+	}
+	free(k);
+
+	ns = htkeys(file.ns, &nns);
+	for (j = 0; j < nns; j++) {
+		stab = htget(file.ns, ns[j]);
+		k = htkeys(stab->dcl, &nk);
+		for (i = 0; i < nk; i++) {
+			s = htget(stab->dcl, k[i]);
+			htput(globls, s, asmname(s));
+		}
+		free(k);
+	}
+	free(ns);
+}
+
 char *
 genlocallblstr(char *buf, size_t sz)
 {
@@ -944,7 +974,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	t = decltype(n);
 
 	assert(n->type == Ndecl);
-	assert(t->type == Tyfunc);
+	assert(t->type == Tyfunc || t->type == Tycode);
 	assert(t->nsub > 0);
 
 	nenv = 0;
@@ -986,7 +1016,11 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 		fprintf(fd, "void");
 	} else {
 		for (size_t i = 1; i < t->nsub; i++) {
-			fprintf(fd, "_Ty%d ", t->sub[i]->tid); //_v%ld/*%s*/%s", decltype(dcl)->tid, dcl->decl.did, declname(dcl), i + 1 == nargs ? "" : ", ");
+			if (t->sub[i]->type == Tyvalist)
+				fprintf(fd, "...");
+			else
+				fprintf(fd, "_Ty%d ", t->sub[i]->tid);
+
 			if (i - 1 < nargs) {
 				Node *dcl = args[i - 1];
 				fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
@@ -1265,7 +1299,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "typedef double _Ty%d; /* Tyflt64 */", t->tid);
 		break;
 	case Tyvalist:
-		fprintf(fd, "//typedef va_list _Ty%d; /* Tyvalist */", t->tid);
+		fprintf(fd, "typedef __builtin_va_list _Ty%d; /* Tyvalist */", t->tid);
 		break;
 	case Typtr:
 		emit_typedef_rec(fd, t->sub[0], visited);
@@ -1398,7 +1432,7 @@ emit_typedefs(FILE *fd)
 
 	bsclear(visited);
 	for (i = 0; i < ntypes; i++) {
-		t = types[i];
+		t = tysearch(types[i]);
 		if (!t->resolved) {
 			continue;
 		}
@@ -1421,6 +1455,7 @@ emit_includes(FILE *fd)
 	fprintf(fd, "#include <stddef.h>\n");
 	fprintf(fd, "#include <stdbool.h>\n");
 	fprintf(fd, "#include <stdint.h>\n");
+	fprintf(fd, "#include <stdarg.h>\n");
 	fprintf(fd, "\n");
 }
 
@@ -1555,6 +1590,24 @@ gentype(FILE *fd, Type *ty)
 }
 
 static void
+emit_externs(FILE *fd, Htab *globls)
+{
+	void **k;
+	Node *n;
+	size_t i, nk;
+
+	fprintf(fd, "/* START OF EXTERNS */\n");
+	k = htkeys(globls, &nk);
+	for (i = 0; i < nk; i++) {
+		n = k[i];
+		if (decltype(n)->type != Tyfunc || !n->decl.isextern)
+			continue;
+		genfuncdecl(fd, n, n->decl.init);
+	}
+	fprintf(fd, "/* END OF EXTERNS */\n");
+}
+
+static void
 gentypes(FILE *fd)
 {
 	Type *ty;
@@ -1671,15 +1724,19 @@ genc(FILE *fd)
 	size_t nfnvals;
 	Bitset *visited;
 	Htab *fndcl;
+	Htab *globls;
 
 	for (size_t i = 0; i < file.nfiles; i++) {
 		fprintf(fd, "/* Filename: %s */\n", file.files[i]);
 	}
 
+	globls = mkht(varhash, vareq);
+	fillglobls(file.globls, globls);
 	pushstab(file.globls);
 
 	emit_includes(fd);
 	emit_typedefs(fd);
+	emit_externs(fd, globls);
 
 	gentypes(fd);
 
