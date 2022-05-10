@@ -1438,36 +1438,36 @@ encodemin(FILE *fd, uvlong val)
 	val >>=  shift;
 	while (val != 0) {
 		if(fd)
-			fprintf(fd, " 0x%02x,\n", (uint)val & 0xff);
+			fprintf(fd, " 0x%02x,", (uint)val & 0xff);
 		val >>= 8;
 		bytes++;
 	}
 
 	if (fd)
-		fprintf(fd, "},");
+		fprintf(fd, "},\n");
 
 	return bytes;
 }
 
 static void
-writeblob_struct(FILE *fd, Blob *b, size_t id)
+writeblob_struct(FILE *fd, Blob *b, size_t *count)
 {
 	size_t i;
 
 	if (!b)
 		return;
 	switch (b->type) {
-	case Btimin:	fprintf(fd, "\tuint8_t _v%ld[%ld];\n", id, encodemin(NULL, b->ival)); break;
-	case Bti8:	fprintf(fd, "\tuint8_t _v%ld;\n", id);	break;
-	case Bti16:	fprintf(fd, "\tuint16_t _v%ld;\n", id);	break;
-	case Bti32:	fprintf(fd, "\tuint32_t _v%ld;\n", id);	break;
-	case Bti64:	fprintf(fd, "\tuint64_t _v%ld;\n", id);	break;
-	case Btbytes:	fprintf(fd, "\tuint8_t _v%ld[%ld];", id, b->bytes.len);	break;
-	case Btpad:	fprintf(fd, "\tuint8_t  _pad%ld[%lld];\n", id, b->npad);	break;
-	case Btref:	fprintf(fd, "\tvoid * _ref%ld;\n", id);	break;
+	case Btimin:	fprintf(fd, "\tuint8_t _iminv%ld[%ld];\n", (*count)++, encodemin(NULL, b->ival)); break;
+	case Bti8:	fprintf(fd, "\tuint8_t _i8v%ld;\n", (*count)++);	break;
+	case Bti16:	fprintf(fd, "\tuint16_t _i16v%ld;\n", (*count)++);	break;
+	case Bti32:	fprintf(fd, "\tuint32_t _i32v%ld;\n", (*count)++);	break;
+	case Bti64:	fprintf(fd, "\tuint64_t _i64v%ld;\n", (*count)++);	break;
+	case Btbytes:	fprintf(fd, "\tuint8_t _bytesv%ld[%ld];\n", (*count)++, b->bytes.len);	break;
+	case Btpad:	fprintf(fd, "\tuint8_t  _pad%ld[%lld];\n", (*count)++, b->npad);	break;
+	case Btref:	fprintf(fd, "\tvoid * _ref%ld;\n", (*count)++);	break;
 	case Btseq:
 		for (i = 0; i < b->seq.nsub; i++)
-			writeblob_struct(fd, b->seq.sub[i], id+i);
+			writeblob_struct(fd, b->seq.sub[i], count);
 		break;
 	}
 }
@@ -1484,10 +1484,10 @@ writebytes(FILE *fd, char *p, size_t sz)
 		else
 			fprintf(fd, " \\%03o,", (uint8_t)p[i] & 0xff);
 		/* line wrapping for readability */
-		if (i % 60 == 59 || i == sz - 1)
+		if (i % 60 == 59)
 			fprintf(fd, "\n");
 	}
-	fprintf(fd, "},");
+	fprintf(fd, "},\n");
 }
 
 static void
@@ -1505,7 +1505,7 @@ writeblob(FILE *fd, Blob *b)
 	case Bti64:	fprintf(fd, " 0x%016llx,\n", b->ival);	break;
 	case Btbytes:	writebytes(fd, b->bytes.buf, b->bytes.len);	break;
 	case Btpad:	fprintf(fd, " {0,},\n");	break;
-	case Btref:	fprintf(fd, " %s + %zd\n", b->ref.str, b->ref.off);	break;
+	case Btref:	fprintf(fd, " (char *)&%s + %zd,\n", b->ref.str, b->ref.off);	break;
 	case Btseq:
 		for (i = 0; i < b->seq.nsub; i++)
 			writeblob(fd, b->seq.sub[i]);
@@ -1533,7 +1533,7 @@ gentype(FILE *fd, Type *ty)
 	
 	blob_id = 0;
 	fprintf(fd, "static const struct {\n");
-	writeblob_struct(fd, b, blob_id);
+	writeblob_struct(fd, b, &blob_id);
 	fprintf(fd, "} %s = {\n", tydescid(buf, sizeof buf, ty));
 	writeblob(fd, b);
 	fprintf(fd, "};\n");
