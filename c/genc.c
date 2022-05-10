@@ -745,7 +745,7 @@ emit_stmt(FILE *fd, Node *n)
 		fprintf(fd, ") {\n");
 		emit_stmt(fd, n->ifstmt.iftrue);
 		if (n->ifstmt.iffalse) {
-			fprintf(fd, "} else ");
+			fprintf(fd, "} else {");
 			emit_stmt(fd, n->ifstmt.iffalse);
 		}
 		fprintf(fd, "}");
