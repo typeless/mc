@@ -1514,6 +1514,14 @@ emit_typedefs(FILE *fd)
 	Bitset *visited;
 	size_t i;
 
+	fprintf(fd, "/* Ntypes: %d */\n", Ntypes);
+	for (i = 0; i < ntypes; i++) {
+		Type *u;
+		t = types[i];
+		u = tytab[t->tid];
+		fprintf(fd, "/* type _Ty%d -> _Ty%d (ty=%s) resolved:%d */\n", t->tid, u ? u->tid : -1, tytystr(t), t->resolved);
+	}
+
 	visited = mkbs();
 
 	fprintf(fd, "/* START OF FORWARD DECLARATIONS */\n");
@@ -1695,6 +1703,8 @@ emit_externs(FILE *fd, Htab *globls)
 		if (!n->decl.isglobl && !n->decl.isextern)
 			continue;
 		if (!isconstfn(n) && !n->decl.isextern)
+			continue;
+		if (!decltype(n)->resolved)
 			continue;
 		switch (decltype(n)->type) {
 		case Tyfunc:
