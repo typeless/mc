@@ -1113,6 +1113,10 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	fprintf(fd, "_Ty%d ", t->sub[0]->tid);
 	fprintf(fd, "%s(", asmname(n));
 
+	if (nenv > 0) {
+		fprintf(fd, ", struct $%s$env %s%s", declname(n), "$env", nargs ? "," : "");
+	}
+
 	/* Insert the parameter for closure env (which may be an empty struct) */
 	if (nenv == 0 && t->nsub == 1) {
 		fprintf(fd, "void");
@@ -1131,10 +1135,6 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 				fprintf(fd, ", ");
 			}
 		}
-	}
-
-	if (nenv > 0) {
-		fprintf(fd, ", struct $%s$env %s%s", declname(n), "$env", nargs ? "," : "");
 	}
 
 	fprintf(fd, ")");
@@ -1157,7 +1157,6 @@ emit_fnenvty(FILE *fd, Node *n)
 
 	nenv = 0;
 	env = getclosure(n->func.scope, &nenv);
-	fprintf(fd, "/* nid:%d nenv:%ld */\n", n->nid, nenv);
 	if (nenv) {
 		fprintf(fd, "struct _envty$%d {\n", n->nid);
 		for (size_t i = 0; i < nenv; i++) {
@@ -1512,18 +1511,11 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 static void
 emit_typedefs(FILE *fd)
 {
-	Type *t, *u;
+	Type *t;
 	Bitset *visited;
 	size_t i;
 
 	visited = mkbs();
-
-	fprintf(fd, "/* Ntypes: %d */\n", Ntypes);
-	for (i = 0; i < ntypes; i++) {
-		t = types[i];
-		u = tytab[t->tid];
-		fprintf(fd, "/* type _Ty%d -> _Ty%d (ty=%d)*/\n", t->tid, u ? u->tid : -1, t->type);
-	}
 
 	fprintf(fd, "/* START OF FORWARD DECLARATIONS */\n");
 	for (i = 0; i < ntypes; i++) {
@@ -1671,10 +1663,9 @@ gentype(FILE *fd, Type *ty)
 	char buf[512];
 
 	ty = tydedup(ty);
-	if (ty->type == Tyvar || ty->isemitted)
+	if (ty->type == Tyvar)
 		return;
 
-	ty->isemitted = 1;
 	b = tydescblob(ty);
 	if (b->isglobl)
 		b->iscomdat = 1;
@@ -1911,7 +1902,6 @@ genc(FILE *fd)
 	/* Output all struct defining func env */
 	for (i = 0; i < nfnvals; i++) {
 		assert(fnvals[i]->type == Nfunc);
-		fprintf(fd, "/* envty nid:%d */\n", fnvals[i]->nid);
 		emit_fnenvty(fd, fnvals[i]);
 	}
 
