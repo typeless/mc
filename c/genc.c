@@ -558,9 +558,10 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "]");
 		break;
 	case Oslice:
-		fprintf(fd, "(_Ty%d){\"", n->expr.type->tid);
-		//fprintf(fd, "")	
-		fprintf(fd, "\", %ld}", args[0]->lit.strval.len);
+		fprintf(fd, "(_Ty%d){", n->expr.type->tid);
+		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, "+ %lld", n->expr.args[1]->lit.intval);
+		fprintf(fd, ", %lld}", args[2]->lit.intval);
 		break;
 	case Omemb:
 		emit_expr(fd, args[0]);
@@ -579,7 +580,14 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Ocast:
 		fprintf(fd, "((_Ty%d)(", exprtype(n)->tid);
-		emit_expr(fd, n->expr.args[0]);
+		switch (exprtype(n->expr.args[0])->type) {
+		case Tyslice:
+			emit_expr(fd, n->expr.args[0]);
+			fprintf(fd, ".p");
+			break;
+		default:
+			emit_expr(fd, n->expr.args[0]);
+		}
 		fprintf(fd, "))");
 		break;
 	case Oret:
