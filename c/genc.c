@@ -1056,7 +1056,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 			}
 		}
 	}
-	fprintf(fd, "_Ty%d\n", t->sub[0]->tid);
+	fprintf(fd, "_Ty%d ", t->sub[0]->tid);
 	fprintf(fd, "%s(", asmname(n));
 
 	/* Insert the parameter for closure env (which may be an empty struct) */
@@ -1083,9 +1083,9 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 		fprintf(fd, ", struct $%s$env %s%s", declname(n), "$env", nargs ? "," : "");
 	}
 
-	fprintf(fd, ")\n");
+	fprintf(fd, ")");
 	if (init) {
-		fprintf(fd, "{\n");
+		fprintf(fd, "\n{\n");
 		emit_fnval(fd, init);
 		fprintf(fd, "}\n\n");
 	} else {
