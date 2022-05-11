@@ -367,58 +367,78 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "})");
 		break;
 	case Oadd:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "+");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Osub:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "-");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Omul:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "*");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Odiv:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "/");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Omod:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "%%");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Oneg:
 		fprintf(fd, "-");
 		emit_expr(fd, args[0]);
 		break;
 	case Obor:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "|");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Oband:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "&");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Obxor:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "^");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Obsl:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "<<");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Obsr:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, ">>");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Obnot:
 		emit_expr(fd, args[0]);
@@ -442,56 +462,76 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "--");
 		break;
 	case Oaddr:
+		fprintf(fd, "(");
 		fprintf(fd, "&");
 		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, ")");
 		break;
 	case Oderef:
+		fprintf(fd, "(");
 		fprintf(fd, "*");
 		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, ")");
 		break;
 	case Olor:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "||");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Oland:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "&&");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Olnot:
 		fprintf(fd, "!");
 		emit_expr(fd, args[0]);
 		break;
 	case Oeq:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "==");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case One:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "!=");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Ogt:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, ">");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Oge:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, ">=");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Olt:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "<");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Ole:
+		fprintf(fd, "(");
 		emit_expr(fd, args[0]);
 		fprintf(fd, "<=");
 		emit_expr(fd, args[1]);
+		fprintf(fd, ")");
 		break;
 	case Oasn:
 		emit_expr(fd, args[0]);
