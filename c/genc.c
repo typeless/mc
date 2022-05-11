@@ -1043,7 +1043,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 		fprintf(fd, "};\n\n");
 	}
 
-	fprintf(fd, "/* vis:%d\n*/\n", n->decl.vis);
+	fprintf(fd, "/* vis:%d isimport:%d\n*/\n", n->decl.vis, n->decl.isimport);
 	if (n->decl.isextern) {
 		fprintf(fd, "extern ");
 	}
@@ -1647,6 +1647,8 @@ emit_externs(FILE *fd, Htab *globls)
 	for (i = 0; i < nk; i++) {
 		n = k[i];
 		if (!n->decl.isextern)
+			continue;
+		if (n->decl.isextern && n->decl.isimport)
 			continue;
 		switch (decltype(n)->type) {
 		case Tyfunc:

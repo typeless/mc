@@ -13,7 +13,7 @@ include ../mk/c.mk
 
 .PHONY: test
 test:
-	MYR_MC=./cm mbld -o obj -b hello tests/hello.myr
+	MYR_MC=./cm mbld -I../obj/lib/sys -o obj -b hello tests/hello.myr
 
 gdb:
 	gdb --args ./cm -o out tests/hello.myr
