@@ -1341,8 +1341,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 	if (!t) {
 		return;
 	}
-	while (tytab[t->tid])
-		t = tytab[t->tid];
+	t = tysearch(t);
 
 	if (bshas(visited, t->tid)) {
 		return;
