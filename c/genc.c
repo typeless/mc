@@ -654,7 +654,7 @@ emit_expr(FILE *fd, Node *n)
 	case Ovar:
 		dcl = decls[n->expr.did];
 		if (dcl->decl.isextern) {
-			fprintf(fd, "%s /* did: %ld */", declname(dcl), dcl->decl.did);
+			fprintf(fd, "%s /* did: %ld */", asmname(dcl), dcl->decl.did);
 		} else {
 			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
 		}
@@ -680,7 +680,6 @@ emit_objdecl(FILE *fd, Node *n)
 
 	if (n->decl.isextern) {
 		fprintf(fd, "extern ");
-		// fprintf(fd, "__attribute__((alias(\"%s\")))", declname(n));
 	}
 	if (!n->decl.isextern && n->decl.isglobl) {
 		if (n->decl.vis == Visintern || n->decl.vis == Vishidden) {
@@ -694,12 +693,11 @@ emit_objdecl(FILE *fd, Node *n)
 
 	fprintf(fd, "_Ty%d ", tysearch(decltype(n))->tid);
 	if (n->decl.isextern) {
-		snprintf(name, sizeof(name), "%s", declname(n));
+		snprintf(name, sizeof(name), "%s", asmname(n));
 	} else {
 		snprintf(name, sizeof(name), "_v%ld", n->decl.did);
 	}
 	fprintf(fd, "%s", name);
-	//fprintf(fd, "/* %s objdecl is_generic:%d ****/ \n", declname(n), n->decl.isgeneric);
 
 	if (n->decl.init) {
 		fprintf(fd, " = ");
