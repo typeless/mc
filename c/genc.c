@@ -1672,8 +1672,6 @@ gentypes(FILE *fd)
 		if (!types[i]->isreflect)
 			continue;
 		ty = tydedup(types[i]);
-		if (ty->isemitted || ty->isimport)
-			continue;
 		fprintf(fd, "extern const struct _Tydesc%d %s;\n", ty->tid, tydescid(buf, sizeof buf, ty));
 	}
 
