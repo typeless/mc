@@ -27,6 +27,7 @@
  * 5. function literals are named '_fn{lit.fnval->nid}'
  */
 
+
 char *
 asmname(Node *dcl)
 {
@@ -1701,9 +1702,9 @@ emit_externs(FILE *fd, Htab *globls)
 	k = htkeys(globls, &nk);
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (!n->decl.isextern && !n->decl.isglobl)
+		if (!n->decl.isglobl && !n->decl.isextern)
 			continue;
-		if (n->decl.isextern && n->decl.isimport)
+		if (!isconstfn(n) && !n->decl.isextern)
 			continue;
 		switch (decltype(n)->type) {
 		case Tyfunc:
@@ -1721,22 +1722,29 @@ static void
 gentypes(FILE *fd)
 {
 	Type *ty;
-	size_t i;
+	size_t i, nreflects;
+	Type **reflects;
 	char buf[512];
 
+
+	reflects = NULL;
+	nreflects = 0;
 	/* Forward declarations */
 	for (i = Ntypes; i < ntypes; i++) {
 		if (!types[i]->isreflect)
 			continue;
 		ty = tydedup(types[i]);
+		if (ty->isemitted)
+			continue;
+		ty->isemitted = 1;
+		lappend(&reflects, &nreflects, ty);
+
 		fprintf(fd, "extern const struct _Tydesc%d %s;\n", ty->tid, tydescid(buf, sizeof buf, ty));
 	}
 
-	for (i = Ntypes; i < ntypes; i++) {
-		if (!types[i]->isreflect)
-			continue;
-		ty = tydedup(types[i]);
-		if (ty->isemitted || ty->isimport)
+	for (i = 0; i < nreflects; i++) {
+		ty = reflects[i];
+		if (ty->isimport)
 			continue;
 		gentype(fd, ty);
 	}
