@@ -54,6 +54,39 @@ asmname(Node *dcl)
 	return strdup(buf);
 }
 
+char *
+tydescid(char *buf, size_t bufsz, Type *ty)
+{
+	char *sep, *ns;
+	char *p, *end;
+	size_t i;
+
+	sep = "";
+	ns = "";
+	p = buf;
+	end = buf + bufsz;
+	ty = tydedup(ty);
+	if (ty->type == Tyname) {
+		if (ty->name->name.ns) {
+			ns = ty->name->name.ns;
+			sep = "$";
+		}
+		if (ty->vis != Visintern || ty->isimport)
+			p += bprintf(p, end - p, "_tydesc$%s%s%s", ns, sep, ty->name->name.name, ty->tid);
+		else
+			p += bprintf(p, end - p, "_tydesc$%s%s%s$%d", ns, sep, ty->name->name.name, ty->tid);
+		for (i = 0; i < ty->narg; i++)
+			p += tyidfmt(p, end - p, ty->arg[i]);
+	} else {
+		if (file.globls->name) {
+			ns = file.globls->name;
+			sep = "$";
+		}
+		bprintf(buf, bufsz, "_tydesc%s%s$%d",sep, ns, ty->tid);
+	}
+	return buf;
+}
+
 static void
 fillglobls(Stab *st, Htab *globls)
 {
@@ -268,7 +301,11 @@ emit_call(FILE *fd, Node *n)
 	if (nenv > 0) {
 		fprintf(fd, "%s &(struct _envty$%d){", nargs > 0 ? "," : "", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
 		for (i = 0; i < nenv; i++) {
-			fprintf(fd, "\t._v%ld = _v%ld,\n", env[i]->decl.did, env[i]->decl.did);
+			fprintf(fd, "\t._v%ld = ", env[i]->decl.did);
+			if (env[i]->decl.isglobl)
+				fprintf(fd, "%s,\n", asmname(env[i]));
+			else
+				fprintf(fd, "_v%ld,\n", env[i]->decl.did);
 		}
 		fprintf(fd, "}%s", nargs ? "," : "");
 	}
@@ -655,6 +692,8 @@ emit_expr(FILE *fd, Node *n)
 		dcl = decls[n->expr.did];
 		if (dcl->decl.isextern) {
 			fprintf(fd, "%s /* did: %ld */", asmname(dcl), dcl->decl.did);
+		} else if (dcl->decl.isglobl) {
+			fprintf(fd, "%s " , asmname(dcl));
 		} else {
 			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
 		}
@@ -693,6 +732,8 @@ emit_objdecl(FILE *fd, Node *n)
 
 	fprintf(fd, "_Ty%d ", tysearch(decltype(n))->tid);
 	if (n->decl.isextern) {
+		snprintf(name, sizeof(name), "%s", asmname(n));
+	} else if(n->decl.isglobl) {
 		snprintf(name, sizeof(name), "%s", asmname(n));
 	} else {
 		snprintf(name, sizeof(name), "_v%ld", n->decl.did);
@@ -977,37 +1018,51 @@ tyalign(Type *ty)
 	return min(align, Ptrsz);
 }
 
-char *
-tydescid(char *buf, size_t bufsz, Type *ty)
+/* Stolen from mc/6/simp.c */
+static Node *
+vatypeinfo(Node *n)
 {
-	char *sep, *ns;
-	char *p, *end;
-	size_t i;
+	Node *ti, *tp, *td, *tn;
+	Type *ft, *vt, **st;
+	size_t nst, i;
+	char buf[1024];
 
-	sep = "";
-	ns = "";
-	p = buf;
-	end = buf + bufsz;
-	ty = tydedup(ty);
-	if (ty->type == Tyname) {
-		if (ty->name->name.ns) {
-			ns = ty->name->name.ns;
-			sep = "$";
-		}
-		if (ty->vis != Visintern || ty->isimport)
-			p += bprintf(p, end - p, "_tydesc$%s%s%s", ns, sep, ty->name->name.name, ty->tid);
-		else
-			p += bprintf(p, end - p, "_tydesc$%s%s%s$%d", ns, sep, ty->name->name.name, ty->tid);
-		for (i = 0; i < ty->narg; i++)
-			p += tyidfmt(p, end - p, ty->arg[i]);
-	} else {
-		if (file.globls->name) {
-			ns = file.globls->name;
-			sep = "$";
-		}
-		bprintf(buf, bufsz, "_tydesc%s%s$%d",sep, ns, ty->tid);
+	st = NULL;
+	nst = 0;
+	ft = exprtype(n->expr.args[0]);
+	/* The structure of ft->sub:
+	 *   [return, normal, args, ...]
+	 *
+	 * The structure of n->expr.sub:
+	 *    [fn, normal, args, , variadic, args]
+	 *
+	 * We want to start at variadic, so we want
+	 * to count from ft->nsub - 1, up to n->expr.nsub.
+	 */
+	for (i = ft->nsub - 1; i < n->expr.nargs; i++) {
+		lappend(&st, &nst, exprtype(n->expr.args[i]));
 	}
-	return buf;
+	vt = mktytuple(n->loc, st, nst);
+	tagreflect(vt);
+
+	/* make the decl */
+	tn = mkname(Zloc, tydescid(buf, sizeof buf, vt));
+	td = mkdecl(Zloc, tn, mktype(n->loc, Tybyte));
+	td->decl.isglobl = 1;
+	td->decl.isconst = 1;
+	td->decl.ishidden = 1;
+
+	/* and the var */
+	ti = mkexpr(Zloc, Ovar, tn, NULL);
+	ti->expr.type = td->decl.type;
+	ti->expr.did = td->decl.did;
+
+	/* and the pointer */
+	tp = mkexpr(Zloc, Oaddr, ti, NULL);
+	tp->expr.type = mktyptr(n->loc, td->decl.type);
+
+	//htput(s->globls, td, asmname(td));
+	return tp;
 }
 
 void
@@ -1646,7 +1701,7 @@ emit_externs(FILE *fd, Htab *globls)
 	k = htkeys(globls, &nk);
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (!n->decl.isextern)
+		if (!n->decl.isextern && !n->decl.isglobl)
 			continue;
 		if (n->decl.isextern && n->decl.isimport)
 			continue;
@@ -1689,7 +1744,7 @@ gentypes(FILE *fd)
 }
 
 static void
-scan(Node ***fnvals, size_t *nfnval, Node *n, Bitset *visited)
+scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n, Bitset *visited)
 {
 	size_t i;
 	Node *init;
@@ -1702,28 +1757,28 @@ scan(Node ***fnvals, size_t *nfnval, Node *n, Bitset *visited)
 	switch (n->type) {
 	case Nblock:
 		for (i = 0; i < n->block.nstmts; i++) {
-			scan(fnvals, nfnval, n->block.stmts[i], visited);
+			scan(fnvals, nfnval, fncalls, nfncalls, n->block.stmts[i], visited);
 		}
 		break;
 	case Nloopstmt:
-		scan(fnvals, nfnval, n->loopstmt.init, visited);
-		scan(fnvals, nfnval, n->loopstmt.body, visited);
-		scan(fnvals, nfnval, n->loopstmt.step, visited);
-		scan(fnvals, nfnval, n->loopstmt.cond, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.init, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.body, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.step, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.cond, visited);
 		break;
 	case Niterstmt:
-		scan(fnvals, nfnval, n->iterstmt.elt, visited);
-		scan(fnvals, nfnval, n->iterstmt.seq, visited);
-		scan(fnvals, nfnval, n->iterstmt.body, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->iterstmt.elt, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->iterstmt.seq, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->iterstmt.body, visited);
 		break;
 	case Nifstmt:
-		scan(fnvals, nfnval, n->ifstmt.cond, visited);
-		scan(fnvals, nfnval, n->ifstmt.iftrue, visited);
-		scan(fnvals, nfnval, n->ifstmt.iffalse, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->ifstmt.cond, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->ifstmt.iftrue, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->ifstmt.iffalse, visited);
 		break;
 	case Nmatchstmt:
 		for (i = 0; i < n->matchstmt.nmatches; i++) {
-			scan(fnvals, nfnval, n->matchstmt.matches[i], visited);
+			scan(fnvals, nfnval, fncalls, nfncalls, n->matchstmt.matches[i], visited);
 		}
 		break;
 	case Nexpr:
@@ -1731,26 +1786,29 @@ scan(Node ***fnvals, size_t *nfnval, Node *n, Bitset *visited)
 		case Olit:
 			switch (n->expr.args[0]->lit.littype) {
 			case Lfunc:
-				scan(fnvals, nfnval, n->expr.args[0]->lit.fnval->func.body, visited);
+				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[0]->lit.fnval->func.body, visited);
 				lappend(fnvals, nfnval, n->expr.args[0]->lit.fnval);
 				break;
 			default:;
 			}
 			break;
+		case Ocall:
+			lappend(fncalls, nfncalls, n);
+			break;
 		case Ovar:
 			init = decls[n->expr.did]->decl.init;
 			if (init)
-				scan(fnvals, nfnval, init, visited);
+				scan(fnvals, nfnval, fncalls, nfncalls, init, visited);
 			break;
 		default:
 			for (size_t i = 0; i < n->expr.nargs; i++) {
-				scan(fnvals, nfnval, n->expr.args[i], visited);
+				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
 			}
 			break;
 		}
 		break;
 	case Ndecl:
-		scan(fnvals, nfnval, n->decl.init, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->decl.init, visited);
 		break;
 	default:;
 	}
@@ -1773,8 +1831,8 @@ genc(FILE *fd)
 {
 	Node *n;
 	size_t i;
-	Node **fnvals;
-	size_t nfnvals;
+	Node **fnvals, **fncalls;
+	size_t nfnvals, nfncalls;
 	Bitset *visited;
 	Htab *fndcl;
 	Htab *globls;
@@ -1791,10 +1849,10 @@ genc(FILE *fd)
 	emit_typedefs(fd);
 	emit_externs(fd, globls);
 
-	gentypes(fd);
-
 	fnvals = NULL;
 	nfnvals = 0;
+	fncalls = NULL;
+	nfncalls = 0;
 	visited = mkbs();
 	fndcl = mkht(fnhash, fneq);
 	for (i = 0; i < file.nstmts; i++) {
@@ -1806,13 +1864,41 @@ genc(FILE *fd)
 
 		if (isconstfn(n)) {
 			htput(fndcl, n->decl.init->expr.args[0]->lit.fnval, n);
-			scan(&fnvals, &nfnvals, n, visited);
+			scan(&fnvals, &nfnvals, &fncalls, &nfncalls, n, visited);
 			// genfuncdecl(fd, n, n->decl.init);
 		} else {
 			emit_objdecl(fd, n);
 		}
 	}
 	bsfree(visited);
+
+	/* Generate tuple types for wrapping variadic arguments */
+	for (i = 0; i < nfncalls; i++) {
+		Type *ft;
+		Node *n, **args;
+		size_t nargs, j;
+
+		n = fncalls[i];
+
+		assert(n->type == Nexpr && exprop(n) == Ocall);
+
+		ft = exprtype(n->expr.args[0]);
+		args = NULL;
+		nargs = 0;
+		for (j = 0; j < n->expr.nargs; j++) {
+			if (j < ft->nsub && tybase(ft->sub[j])->type == Tyvalist)
+				lappend(&args, &nargs, vatypeinfo(n));
+			if (tybase(exprtype(n->expr.args[j]))->type == Tyvoid)
+				continue;
+			lappend(&args, &nargs, n->expr.args[j]);
+		}
+		free(n->expr.args);
+		n->expr.args = args;
+		n->expr.nargs = nargs;
+	}
+
+	/* Output type descriptors */
+	gentypes(fd);
 
 	/* Output all struct defining func env */
 	for (i = 0; i < nfnvals; i++) {
