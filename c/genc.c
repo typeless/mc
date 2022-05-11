@@ -1648,9 +1648,16 @@ emit_externs(FILE *fd, Htab *globls)
 	k = htkeys(globls, &nk);
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (decltype(n)->type != Tyfunc || !n->decl.isextern)
+		if (!n->decl.isextern)
 			continue;
-		genfuncdecl(fd, n, n->decl.init);
+		switch (decltype(n)->type) {
+		case Tyfunc:
+		case Tycode:
+			genfuncdecl(fd, n, NULL);
+			break;
+		default:
+			emit_objdecl(fd, n);
+		}
 	}
 	fprintf(fd, "/* END OF EXTERNS */\n");
 }
