@@ -1103,8 +1103,11 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	if (n->decl.isextern) {
 		fprintf(fd, "extern ");
 	}
+	if (n->decl.vis == Vishidden) {
+		fprintf(fd, "__attribute__((visibility(\"hidden\"))) ");
+	}
 	if (!n->decl.isextern && n->decl.isglobl) {
-		if (n->decl.vis == Visintern || n->decl.vis == Vishidden) {
+		if (n->decl.vis == Visintern) {
 			if (!streq(declname(n), "__init__") && !streq(declname(n), "__fini__") && !streq(declname(n), "main")) {
 				fprintf(fd, "static ");
 			}
@@ -1703,6 +1706,8 @@ emit_prototypes(FILE *fd, Htab *globls, Node **fnvals, size_t nfnvals)
 	for (i = 0; i < nk; i++) {
 		n = k[i];
 		if (decltype(n)->type != Tyfunc && !n->decl.isextern)
+			continue;
+		if (!n->decl.isextern && n->decl.init == NULL)
 			continue;
 		if (!decltype(n)->resolved)
 			continue;
