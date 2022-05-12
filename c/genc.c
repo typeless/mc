@@ -302,7 +302,7 @@ emit_call(FILE *fd, Node *n)
 	if (nenv > 0) {
 		fprintf(fd, "%s &(struct _envty$%d){", nargs > 0 ? "," : "", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
 		for (i = 0; i < nenv; i++) {
-			fprintf(fd, "\t._v%ld = ", env[i]->decl.did);
+			//fprintf(fd, "\t._v%ld = ", env[i]->decl.did);
 			if (env[i]->decl.isglobl)
 				fprintf(fd, "%s,\n", asmname(env[i]));
 			else
@@ -1515,12 +1515,14 @@ emit_typedefs(FILE *fd)
 	size_t i;
 
 	fprintf(fd, "/* Ntypes: %d */\n", Ntypes);
+#if 0
 	for (i = 0; i < ntypes; i++) {
 		Type *u;
 		t = types[i];
 		u = tytab[t->tid];
 		fprintf(fd, "/* type _Ty%d -> _Ty%d (ty=%s) resolved:%d */\n", t->tid, u ? u->tid : -1, tytystr(t), t->resolved);
 	}
+#endif
 
 	visited = mkbs();
 
@@ -1690,7 +1692,7 @@ gentype(FILE *fd, Type *ty)
 }
 
 static void
-emit_externs(FILE *fd, Htab *globls)
+emit_prototypes(FILE *fd, Htab *globls, Node **fnvals, size_t nfnvals)
 {
 	void **k;
 	Node *n;
@@ -1700,8 +1702,6 @@ emit_externs(FILE *fd, Htab *globls)
 	k = htkeys(globls, &nk);
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		//if (!n->decl.isglobl && !n->decl.isextern)
-		//	continue;
 		if (decltype(n)->type != Tyfunc && !n->decl.isextern)
 			continue;
 		if (!decltype(n)->resolved)
@@ -1801,6 +1801,8 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 			break;
 		case Ocall:
 			lappend(fncalls, nfncalls, n);
+			for (i = 0; i < n->expr.nargs; i++)
+				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
 			break;
 		case Ovar:
 			init = decls[n->expr.did]->decl.init;
@@ -1904,19 +1906,19 @@ genc(FILE *fd)
 	}
 	emit_includes(fd);
 	emit_typedefs(fd);
-	emit_externs(fd, globls);
+
+	/* Output all struct defining func env */
+	for (i = 0; i < nfnvals; i++) {
+		assert(fnvals[i]->type == Nfunc);
+		emit_fnenvty(fd, fnvals[i]);
+	}
+	emit_prototypes(fd, globls, fnvals, nfnvals);
 
 	/* Output type descriptors */
 	gentypes(fd);
 
 	for (i = 0; i < nobjdecls; i++) {
 		emit_objdecl(fd, objdecls[i]);
-	}
-
-	/* Output all struct defining func env */
-	for (i = 0; i < nfnvals; i++) {
-		assert(fnvals[i]->type == Nfunc);
-		emit_fnenvty(fd, fnvals[i]);
 	}
 
 	/* Output all function definitions */
