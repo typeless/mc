@@ -411,7 +411,8 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "._utag = %ld,", uc->id);
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
 			fprintf(fd, "._udata = {");
-			emit_expr(fd, n->expr.args[1]);
+			if (exprtype(n->expr.args[1])->type != Tyvoid)
+				emit_expr(fd, n->expr.args[1]);
 			fprintf(fd, "},");
 		}
 		fprintf(fd, "})");
@@ -491,9 +492,8 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, ")");
 		break;
 	case Obnot:
-		emit_expr(fd, args[0]);
 		fprintf(fd, "~");
-		emit_expr(fd, args[1]);
+		emit_expr(fd, args[0]);
 		break;
 	case Opreinc:
 		fprintf(fd, "++");
@@ -1471,7 +1471,8 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		for (i = 0; i < t->nmemb; i++) {
 			char *ns = t->udecls[i]->name->name.ns;
 			char *name = t->udecls[i]->name->name.name;
-			if (t->udecls[i]->etype) {
+			Type *etype = t->udecls[i]->etype;
+			if (etype && tybase(etype)->type != Tyvoid) {
 				fprintf(fd, "_Ty%d %s%s%s;", t->udecls[i]->etype->tid, ns ? ns : "", ns ? "$" : "", name);
 			} else {
 				fprintf(fd, "/* no etype */");
