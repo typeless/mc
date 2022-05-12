@@ -14,7 +14,8 @@ include ../mk/c.mk
 .PHONY: test
 test:
 	cd ..; MYR_MC=c/cm mbld clean lib/sys:sys
-	cd ..; MYR_MC=c/cm mbld -v lib/sys:sys 2>&1 | tee k.txt
+	cd ..; MYR_MC=c/cm mbld -v lib/sys:sys 2>&1 | tee sys.txt
+	cd ..; MYR_MC=c/cm mbld -v lib/std:std 2>&1 | tee std.txt
 	MYR_MC=./cm mbld -I../obj/lib/sys -o obj -b hello tests/hello.myr 2>&1 | tee hello.txt
 
 gdb:

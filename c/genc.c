@@ -600,7 +600,7 @@ emit_expr(FILE *fd, Node *n)
 			emit_expr(fd, args[1]);
 			break;
 		default:
-			assert(0);
+			fatal(args[0], "Invalid lvalue operand of assignment");
 		}
 		break;
 	case Oaddeq:
