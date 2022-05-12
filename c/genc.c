@@ -1720,8 +1720,6 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		fprintf(fd, "/*XXX %s isextern:%d resolved:%d */\n", asmname(n), n->decl.isextern, decltype(n)->resolved);
 		if (decltype(n)->type != Tyfunc && !n->decl.isextern)
 			continue;
-		//if (!n->decl.isextern && n->decl.init == NULL)
-		//	continue;
 		if (!decltype(n)->resolved)
 			continue;
 		switch (decltype(n)->type) {
@@ -1866,7 +1864,8 @@ genc(FILE *fd)
 	Htab *refcnts;
 
 	globls = mkht(varhash, vareq);
-	refcnts = mkht(varhash, vareq);
+	refcnts = mkht(fnhash, fneq);
+	fndcl = mkht(fnhash, fneq);
 
 	fillglobls(file.globls, globls);
 	pushstab(file.globls);
@@ -1879,7 +1878,6 @@ genc(FILE *fd)
 	nobjdecls = 0;
 
 	visited = mkbs();
-	fndcl = mkht(fnhash, fneq);
 	for (i = 0; i < file.nstmts; i++) {
 		n = file.stmts[i];
 		if (n->type != Ndecl)
@@ -1895,6 +1893,20 @@ genc(FILE *fd)
 		}
 	}
 	bsfree(visited);
+
+	/* Compute reference counts of functions */
+	for (i = 0; i < nfncalls; i++) {
+		Node *fn = fncalls[i];
+		size_t count;
+
+		if (!hthas(refcnts, fn)) {
+			htput(refcnts, fn, (void *)1);
+		} else {
+			count = (size_t)htget(refcnts, fn);
+			count++;
+			htput(refcnts, fn, (void *)count);
+		}
+	}
 
 	/* Translate valist arguments to tuple types */
 	for (i = 0; i < nfncalls; i++) {
