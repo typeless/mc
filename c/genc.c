@@ -1372,7 +1372,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "typedef bool _Ty%d; /* Tybool */", t->tid);
 		break;
 	case Tychar:
-		fprintf(fd, "typedef char _Ty%d; /* Tychar */", t->tid);
+		fprintf(fd, "typedef uint32_t _Ty%d; /* Tychar */", t->tid);
 		break;
 	case Tyint8:
 		fprintf(fd, "typedef int8_t _Ty%d; /* Tyint8 */", t->tid);
