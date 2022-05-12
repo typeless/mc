@@ -409,7 +409,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
 		fprintf(fd," {");
 		fprintf(fd, "._utag = %ld,", uc->id);
-		if (n->expr.args[1]) {
+		if (n->expr.nargs == 2 && n->expr.args[1]) {
 			fprintf(fd, "._udata = {");
 			emit_expr(fd, n->expr.args[1]);
 			fprintf(fd, "},");
