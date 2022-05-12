@@ -1707,7 +1707,7 @@ gentype(FILE *fd, Type *ty)
 }
 
 static void
-emit_prototypes(FILE *fd, Htab *globls, Node **fnvals, size_t nfnvals)
+emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 {
 	void **k;
 	Node *n;
@@ -1717,10 +1717,11 @@ emit_prototypes(FILE *fd, Htab *globls, Node **fnvals, size_t nfnvals)
 	k = htkeys(globls, &nk);
 	for (i = 0; i < nk; i++) {
 		n = k[i];
+		fprintf(fd, "/*XXX %s isextern:%d resolved:%d */\n", asmname(n), n->decl.isextern, decltype(n)->resolved);
 		if (decltype(n)->type != Tyfunc && !n->decl.isextern)
 			continue;
-		if (!n->decl.isextern && n->decl.init == NULL)
-			continue;
+		//if (!n->decl.isextern && n->decl.init == NULL)
+		//	continue;
 		if (!decltype(n)->resolved)
 			continue;
 		switch (decltype(n)->type) {
@@ -1862,8 +1863,11 @@ genc(FILE *fd)
 	Bitset *visited;
 	Htab *fndcl;
 	Htab *globls;
+	Htab *refcnts;
 
 	globls = mkht(varhash, vareq);
+	refcnts = mkht(varhash, vareq);
+
 	fillglobls(file.globls, globls);
 	pushstab(file.globls);
 
@@ -1883,9 +1887,9 @@ genc(FILE *fd)
 		if (n->decl.isextern || n->decl.isgeneric)
 			continue;
 
+		scan(&fnvals, &nfnvals, &fncalls, &nfncalls, n, visited);
 		if (isconstfn(n)) {
 			htput(fndcl, n->decl.init->expr.args[0]->lit.fnval, n);
-			scan(&fnvals, &nfnvals, &fncalls, &nfncalls, n, visited);
 		} else {
 			lappend(&objdecls, &nobjdecls, n);
 		}
@@ -1936,7 +1940,7 @@ genc(FILE *fd)
 		assert(fnvals[i]->type == Nfunc);
 		emit_fnenvty(fd, fnvals[i]);
 	}
-	emit_prototypes(fd, globls, fnvals, nfnvals);
+	emit_prototypes(fd, globls, refcnts);
 
 	/* Output type descriptors */
 	gentypes(fd);
