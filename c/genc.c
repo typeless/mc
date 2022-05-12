@@ -584,9 +584,24 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, ")");
 		break;
 	case Oasn:
-		emit_expr(fd, args[0]);
-		fprintf(fd, "=");
-		emit_expr(fd, args[1]);
+		switch (exprop(args[0])) {
+		case Ogap:
+			fprintf(fd, "(void)");
+			emit_expr(fd, args[1]);
+			break;
+		case Otup:
+			break;
+		case Oidx:
+		case Oderef:
+		case Omemb:
+		case Ovar:
+			emit_expr(fd, args[0]);
+			fprintf(fd, "=");
+			emit_expr(fd, args[1]);
+			break;
+		default:
+			assert(0);
+		}
 		break;
 	case Oaddeq:
 		emit_expr(fd, args[0]);

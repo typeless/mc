@@ -51,6 +51,7 @@ gen(char *out)
 	FILE *fd;
 	char buf[1024];
 	char *infile;
+	char *cflags;
 
 	swapsuffix(buf, sizeof buf, out, ".o", ".c");
 	fd = fopen(buf, "w");
@@ -71,7 +72,10 @@ gen(char *out)
 	genc(fd);
 	fclose(fd);
 
-	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", "-O2 -Wall -c -x c -g -fno-stack-protector -o", out, infile);
+	cflags = "-Wall -Wno-unused-function -Wno-unused-variable -Wno-main" \
+		  " -O2 -c -x c -g -fno-stack-protector -o";
+
+	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", cflags, out, infile);
 	fprintf(stderr, "cmd: %s\n", buf);
 	system(buf);
 
