@@ -1700,15 +1700,14 @@ emit_externs(FILE *fd, Htab *globls)
 	k = htkeys(globls, &nk);
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (!n->decl.isglobl && !n->decl.isextern)
-			continue;
-		if (!isconstfn(n) && !n->decl.isextern)
+		//if (!n->decl.isglobl && !n->decl.isextern)
+		//	continue;
+		if (decltype(n)->type != Tyfunc && !n->decl.isextern)
 			continue;
 		if (!decltype(n)->resolved)
 			continue;
 		switch (decltype(n)->type) {
 		case Tyfunc:
-		case Tycode:
 			genfuncdecl(fd, n, NULL);
 			break;
 		default:
@@ -1839,28 +1838,23 @@ genc(FILE *fd)
 {
 	Node *n;
 	size_t i;
-	Node **fnvals, **fncalls;
-	size_t nfnvals, nfncalls;
+	Node **fnvals, **fncalls, **objdecls;
+	size_t nfnvals, nfncalls, nobjdecls;
 	Bitset *visited;
 	Htab *fndcl;
 	Htab *globls;
-
-	for (size_t i = 0; i < file.nfiles; i++) {
-		fprintf(fd, "/* Filename: %s */\n", file.files[i]);
-	}
 
 	globls = mkht(varhash, vareq);
 	fillglobls(file.globls, globls);
 	pushstab(file.globls);
 
-	emit_includes(fd);
-	emit_typedefs(fd);
-	emit_externs(fd, globls);
-
 	fnvals = NULL;
 	nfnvals = 0;
 	fncalls = NULL;
 	nfncalls = 0;
+	objdecls = NULL;
+	nobjdecls = 0;
+
 	visited = mkbs();
 	fndcl = mkht(fnhash, fneq);
 	for (i = 0; i < file.nstmts; i++) {
@@ -1873,14 +1867,13 @@ genc(FILE *fd)
 		if (isconstfn(n)) {
 			htput(fndcl, n->decl.init->expr.args[0]->lit.fnval, n);
 			scan(&fnvals, &nfnvals, &fncalls, &nfncalls, n, visited);
-			// genfuncdecl(fd, n, n->decl.init);
 		} else {
-			emit_objdecl(fd, n);
+			lappend(&objdecls, &nobjdecls, n);
 		}
 	}
 	bsfree(visited);
 
-	/* Generate tuple types for wrapping variadic arguments */
+	/* Translate valist arguments to tuple types */
 	for (i = 0; i < nfncalls; i++) {
 		Type *ft;
 		Node *n, **args;
@@ -1905,8 +1898,20 @@ genc(FILE *fd)
 		n->expr.nargs = nargs;
 	}
 
+	/* Start to output C code */
+	for (size_t i = 0; i < file.nfiles; i++) {
+		fprintf(fd, "/* Filename: %s */\n", file.files[i]);
+	}
+	emit_includes(fd);
+	emit_typedefs(fd);
+	emit_externs(fd, globls);
+
 	/* Output type descriptors */
 	gentypes(fd);
+
+	for (i = 0; i < nobjdecls; i++) {
+		emit_objdecl(fd, objdecls[i]);
+	}
 
 	/* Output all struct defining func env */
 	for (i = 0; i < nfnvals; i++) {
