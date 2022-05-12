@@ -671,6 +671,11 @@ emit_expr(FILE *fd, Node *n)
 			fprintf(fd, ", %lld}", args[2]->lit.intval);
 			break;
 		case Typtr:
+			fprintf(fd, "(_Ty%d){", n->expr.type->tid);
+			emit_expr(fd, n->expr.args[0]);
+			fprintf(fd, " + %lld", n->expr.args[1]->lit.intval);
+			fprintf(fd, ", %lld}", args[2]->lit.intval);
+			break;
 		default:
 			fatal(args[0], "not sliceable object");
 		}
