@@ -204,7 +204,7 @@ emit_type(FILE *fd, Type *t)
 		break;
 	case Tyunion:
 		fprintf(fd, "struct {");
-		fprintf(fd, "uint32_t _tag;");
+		fprintf(fd, "uintptr_t _tag;");
 		fprintf(fd, "union {");
 		for (i = 0; i < t->nmemb; i++) {
 			char *ns = t->udecls[i]->name->name.ns;
@@ -1451,7 +1451,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 			emit_typedef_rec(fd, t->udecls[i]->etype, visited);
 		}
 		fprintf(fd, "typedef struct {");
-		fprintf(fd, "uint32_t _utag;");
+		fprintf(fd, "uintptr_t _utag;");
 		fprintf(fd, "union {");
 		for (i = 0; i < t->nmemb; i++) {
 			char *ns = t->udecls[i]->name->name.ns;
