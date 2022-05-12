@@ -1880,16 +1880,23 @@ genc(FILE *fd)
 		Type *ft;
 		Node *n, **args;
 		size_t nargs, j;
+		int notsyscall;
 
 		n = fncalls[i];
 
 		assert(n->type == Nexpr && exprop(n) == Ocall);
 
+		notsyscall = 1;
+		if (exprop(n->expr.args[0]) == Ovar) {
+			Node *dcl = decls[n->expr.args[0]->expr.did];
+			notsyscall = !streq(asmname(dcl), "sys$syscall");
+		}
+
 		ft = exprtype(n->expr.args[0]);
 		args = NULL;
 		nargs = 0;
 		for (j = 0; j < n->expr.nargs; j++) {
-			if (j < ft->nsub && tybase(ft->sub[j])->type == Tyvalist)
+			if (notsyscall && j < ft->nsub && tybase(ft->sub[j])->type == Tyvalist)
 				lappend(&args, &nargs, vatypeinfo(n));
 			if (tybase(exprtype(n->expr.args[j]))->type == Tyvoid)
 				continue;
