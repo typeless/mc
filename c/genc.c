@@ -349,7 +349,7 @@ emit_expr(FILE *fd, Node *n)
 			break;
 		case Lstr:
 			// fprintf(fd, "\"%.*s\"", (int)args[0]->lit.strval.len, args[0]->lit.strval.buf);
-			fprintf(fd, "(_Ty%d){\"", n->expr.type->tid);
+			fprintf(fd, "(_Ty%d){(uint8_t *)\"", n->expr.type->tid);
 			for (size_t i = 0; i < args[0]->lit.strval.len; i++) {
 				char ch = args[0]->lit.strval.buf[i];
 				if (iscntrl(ch) || ch == '\\' || ch == '\"' || ch == '\'') {

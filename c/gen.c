@@ -71,7 +71,7 @@ gen(char *out)
 	genc(fd);
 	fclose(fd);
 
-	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", "-O2 -c -x c -g -fno-stack-protector -o", out, infile);
+	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", "-O2 -Wall -c -x c -g -fno-stack-protector -o", out, infile);
 	fprintf(stderr, "cmd: %s\n", buf);
 	system(buf);
 
