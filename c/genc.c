@@ -376,8 +376,20 @@ emit_expr(FILE *fd, Node *n)
 			assert(0);
 		}
 		break;
-	case Otup:
 	case Oarr:
+		fprintf(fd, "(");
+		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
+
+		fprintf(fd," {.elem = {");
+		for (size_t i = 0; i < n->expr.nargs; i++) {
+			emit_expr(fd, n->expr.args[i]);
+			if (i + 1 < n->expr.nargs) {
+				fprintf(fd, ", ");
+			}
+		}
+		fprintf(fd, "}})");
+		break;
+	case Otup:
 	case Ostruct:
 		fprintf(fd, "(");
 		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
