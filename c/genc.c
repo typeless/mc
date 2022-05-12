@@ -663,10 +663,17 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "]");
 		break;
 	case Oslice:
-		fprintf(fd, "(_Ty%d){", n->expr.type->tid);
-		emit_expr(fd, n->expr.args[0]);
-		fprintf(fd, "+ %lld", n->expr.args[1]->lit.intval);
-		fprintf(fd, ", %lld}", args[2]->lit.intval);
+		switch (exprtype(args[0])->type) {
+		case Tyslice:
+			fprintf(fd, "(_Ty%d){(", n->expr.type->tid);
+			emit_expr(fd, n->expr.args[0]);
+			fprintf(fd, ").p + %lld", n->expr.args[1]->lit.intval);
+			fprintf(fd, ", %lld}", args[2]->lit.intval);
+			break;
+		case Typtr:
+		default:
+			fatal(args[0], "not sliceable object");
+		}
 		break;
 	case Omemb:
 		emit_expr(fd, args[0]);
