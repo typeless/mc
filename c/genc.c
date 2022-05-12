@@ -219,7 +219,7 @@ emit_type(FILE *fd, Type *t)
 	case Tyslice:
 		fprintf(fd, "struct {");
 		emit_type(fd, t->sub[0]);
-		fprintf(fd, "*p; uint32_t len /* size_t */; }");
+		fprintf(fd, "*p; size_t len /* size_t */; }");
 		break;
 	case Tyfunc:
 		fprintf(fd, "typeof(");
@@ -1470,7 +1470,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 
 		fprintf(fd, "typedef ");
 		// emit_type(fd, t);
-		fprintf(fd, "struct { _Ty%d *p; uint32_t len /* size_t */; }", t->sub[0]->tid);
+		fprintf(fd, "struct { _Ty%d *p; size_t len; }", t->sub[0]->tid);
 		fprintf(fd, " _Ty%d;", t->tid);
 		break;
 	case Tyfunc:
