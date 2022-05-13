@@ -31,8 +31,11 @@ const bar = {
 }
 
 const main = {
+	var x, y
 	var a = foo(200, 300)
 	var b = 123
 	sys.write(2, "hello world\n")
+	(x, y) = (10, 20)
+	//std.put("byte\n")
 	//var f = {; -> {;->b} }
 }

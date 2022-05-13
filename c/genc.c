@@ -320,6 +320,58 @@ emit_call(FILE *fd, Node *n)
 	fprintf(fd, ")");
 }
 
+static void emit_assign(FILE *fd, Node *lhs, Node *rhs);
+static void
+emit_destructure(FILE *fd, Node *lhs, Node *rhs)
+{
+	Node **args;
+	Node *lv, *rv;
+	Node *idx;
+	size_t i;
+
+	assert(exprop(lhs) == Otup);
+
+	args = lhs->expr.args;
+	for (i = 0; i < lhs->expr.nargs; i++) {
+		idx = mkintlit(rhs->loc, i);
+		idx->expr.type = mktype(rhs->loc, Tyuint64);
+		rv = mkexpr(rhs->loc, Otupget, rhs, idx, NULL);
+		rv->expr.type = lhs->expr.type;
+
+		if (exprop(args[i]) == Otup) {
+			emit_destructure(fd, args[i], rv);
+		} else {
+			lv = args[i];
+			emit_assign(fd, lv, rv);
+		}
+	}
+}
+
+static void
+emit_assign(FILE *fd, Node *lhs, Node *rhs)
+{
+	switch (exprop(lhs)) {
+		case Ogap:
+			fprintf(fd, "(void)");
+			emit_expr(fd, rhs);
+			break;
+		case Otup:
+			emit_destructure(fd, lhs, rhs);
+			break;
+		case Oidx:
+		case Oderef:
+		case Omemb:
+		case Ovar:
+			emit_expr(fd, lhs);
+			fprintf(fd, " = ");
+			emit_expr(fd, rhs);
+			break;
+		default:
+			fatal(lhs, "Invalid lvalue operand of assignment");
+	}
+	fprintf(fd, ";\n");
+}
+
 static void
 emit_expr(FILE *fd, Node *n)
 {
@@ -584,24 +636,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, ")");
 		break;
 	case Oasn:
-		switch (exprop(args[0])) {
-		case Ogap:
-			fprintf(fd, "(void)");
-			emit_expr(fd, args[1]);
-			break;
-		case Otup:
-			break;
-		case Oidx:
-		case Oderef:
-		case Omemb:
-		case Ovar:
-			emit_expr(fd, args[0]);
-			fprintf(fd, "=");
-			emit_expr(fd, args[1]);
-			break;
-		default:
-			fatal(args[0], "Invalid lvalue operand of assignment");
-		}
+		emit_assign(fd, args[0], args[1]);
 		break;
 	case Oaddeq:
 		emit_expr(fd, args[0]);
@@ -742,7 +777,9 @@ emit_expr(FILE *fd, Node *n)
 		assert(n->expr.args[0]->type == Nexpr);
 		assert(n->expr.args[1]->expr.op == Olit);
 		assert(n->expr.args[1]->expr.args[0]->lit.littype == Lint);
-		fprintf(fd, "((_v%d).", n->expr.args[0]->nid);
+		fprintf(fd, "(((");
+		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, ")).");
 		fprintf(fd, "_%llu)", n->expr.args[1]->expr.args[0]->lit.intval);
 		break;
 	default:;
