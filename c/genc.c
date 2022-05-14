@@ -396,6 +396,22 @@ emit_expr(FILE *fd, Node *n)
 			break;
 		case Lint:
 			fprintf(fd, "%lld", args[0]->lit.intval);
+			switch (exprtype(n)->type) {
+			case Tyint64:
+				fprintf(fd, "LL");
+				break;
+			case Tyuint64:
+				fprintf(fd, "ULL");
+				break;
+			case Tyint32:
+				fprintf(fd, "L");
+				break;
+			case Tyuint32:
+				fprintf(fd, "UL");
+				break;
+			default:
+				;
+			}
 			break;
 		case Lflt:
 			fprintf(fd, "%f", args[0]->lit.fltval);
