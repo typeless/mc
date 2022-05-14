@@ -72,7 +72,9 @@ gen(char *out)
 	genc(fd);
 	fclose(fd);
 
-	cflags = "-Wall -Wno-unused-function -Wno-unused-variable -Wno-main" \
+	cflags = "-Wall " \
+		"-Wno-unused-function -Wno-unused-variable -Wno-main" \
+		" -Wno-discarded-qualifiers " \
 		  " -O2 -c -x c -g -fno-stack-protector -o";
 
 	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", cflags, out, infile);

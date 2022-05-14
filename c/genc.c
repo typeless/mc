@@ -378,6 +378,8 @@ emit_expr(FILE *fd, Node *n)
 	Node **args;
 	Node *dcl;
 	Ucon *uc;
+	size_t i;
+	char ch;
 
 	assert(n->type == Nexpr);
 
@@ -388,7 +390,12 @@ emit_expr(FILE *fd, Node *n)
 	case Olit:
 		switch (args[0]->lit.littype) {
 		case Lchr:
-			fprintf(fd, "'%c'", args[0]->lit.chrval);
+			ch = args[0]->lit.chrval;
+			if (iscntrl(ch) || ch == '\\' || ch == '\"' || ch == '\'') {
+				fprintf(fd, "0x%02x", ch);
+			} else {
+				fprintf(fd, "'%c'", ch);
+			}
 			break;
 		case Lbool:
 			fprintf(fd, "%s", args[0]->lit.boolval ? "true" : "false");
@@ -402,8 +409,8 @@ emit_expr(FILE *fd, Node *n)
 		case Lstr:
 			// fprintf(fd, "\"%.*s\"", (int)args[0]->lit.strval.len, args[0]->lit.strval.buf);
 			fprintf(fd, "(_Ty%d){(uint8_t *)\"", n->expr.type->tid);
-			for (size_t i = 0; i < args[0]->lit.strval.len; i++) {
-				char ch = args[0]->lit.strval.buf[i];
+			for (i = 0; i < args[0]->lit.strval.len; i++) {
+				ch = args[0]->lit.strval.buf[i];
 				if (iscntrl(ch) || ch == '\\' || ch == '\"' || ch == '\'') {
 					fprintf(fd, "\\%03o", ch);
 				} else {
@@ -433,7 +440,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
 
 		fprintf(fd," {.elem = {");
-		for (size_t i = 0; i < n->expr.nargs; i++) {
+		for (i = 0; i < n->expr.nargs; i++) {
 			emit_expr(fd, n->expr.args[i]);
 			if (i + 1 < n->expr.nargs) {
 				fprintf(fd, ", ");
@@ -447,7 +454,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
 
 		fprintf(fd," {");
-		for (size_t i = 0; i < n->expr.nargs; i++) {
+		for (i = 0; i < n->expr.nargs; i++) {
 			emit_expr(fd, n->expr.args[i]);
 			if (i + 1 < n->expr.nargs) {
 				fprintf(fd, ", ");
@@ -463,8 +470,19 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "._utag = %ld,", uc->id);
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
 			fprintf(fd, "._udata = {");
-			if (exprtype(n->expr.args[1])->type != Tyvoid)
-				emit_expr(fd, n->expr.args[1]);
+			if (exprtype(n->expr.args[1])->type != Tyvoid) {
+				switch (exprtype(n->expr.args[1])->type) {
+				case Tyarray:
+				case Tyslice:
+				case Tystruct:
+					fprintf(fd, "{");
+					emit_expr(fd, n->expr.args[1]);
+					fprintf(fd, "}");
+					break;
+				default:
+					emit_expr(fd, n->expr.args[1]);
+				}
+			}
 			fprintf(fd, "},");
 		}
 		fprintf(fd, "})");
@@ -699,6 +717,12 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Oslice:
 		switch (exprtype(args[0])->type) {
+		case Tyarray:
+			fprintf(fd, "(_Ty%d){(", n->expr.type->tid);
+			emit_expr(fd, n->expr.args[0]);
+			fprintf(fd, ").elem + %lld", n->expr.args[1]->lit.intval);
+			fprintf(fd, ", %lld}", args[2]->lit.intval);
+			break;
 		case Tyslice:
 			fprintf(fd, "(_Ty%d){(", n->expr.type->tid);
 			emit_expr(fd, n->expr.args[0]);
@@ -716,8 +740,23 @@ emit_expr(FILE *fd, Node *n)
 		}
 		break;
 	case Omemb:
-		emit_expr(fd, args[0]);
-		fprintf(fd, "%s%s", args[0]->expr.type->type == Typtr ? "->" : ".", namestr(args[1]));
+		switch (exprtype(args[0])->type) {
+		case Tyarray:
+			if (!streq(namestr(args[1]), "len")) {
+				die("array type should not have members other than 'len'");
+			}
+
+			fprintf(fd, "(sizeof(");
+			emit_expr(fd, args[0]);
+			fprintf(fd, ".elem)/sizeof(");
+			emit_expr(fd, args[0]);
+			fprintf(fd, ".elem[0]))");
+			break;
+		default:
+			emit_expr(fd, args[0]);
+			fprintf(fd, "%s%s", args[0]->expr.type->type == Typtr ? "->" : ".", namestr(args[1]));
+		}
+
 		break;
 	case Otupmemb:
 		assert(0);
@@ -761,14 +800,26 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Oudata:
 		emit_expr(fd, n->expr.args[0]);
-		fprintf(fd, "._udata");
+		{
+			Type *uty, *ety;
+			Ucon *uc;
+			ety = exprtype(n);
+			uty = exprtype(n->expr.args[0]);
+			for (i = 0; i < uty->nmemb; i++) {
+				uc = uty->udecls[i];
+				if (uc->etype->tid == ety->tid)
+					break;
+			}
+			assert(uc != NULL);
+			fprintf(fd, "._udata.%s /* %s */", namestr(uc->name), tystr(exprtype(n)));
+		}
 		break;
 	case Ovar:
 		dcl = decls[n->expr.did];
 		if (dcl->decl.isextern) {
 			fprintf(fd, "%s /* did: %ld */", asmname(dcl), dcl->decl.did);
 		} else if (dcl->decl.isglobl) {
-			fprintf(fd, "%s " , asmname(dcl));
+			fprintf(fd, "%s" , asmname(dcl));
 		} else {
 			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
 		}
