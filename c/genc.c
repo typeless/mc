@@ -291,11 +291,6 @@ emit_call(FILE *fd, Node *n)
 	} else if (n->expr.args[0]->expr.op == Ovar) {
 		dcl = decls[n->expr.args[0]->expr.did];
 		nargs = n->expr.nargs;
-		fprintf(fd, "/*ns:%s %s*/\n", dcl->decl.name->name.ns, declname(dcl));
-		//if (dcl->decl.name->name.ns) {
-		//	fprintf(fd, "%s$", dcl->decl.name->name.ns);
-		//}
-		//fprintf(fd, "%s", declname(dcl));
 		fprintf(fd, "%s", asmname(dcl));
 	}
 	fprintf(fd, "(");
@@ -369,7 +364,6 @@ emit_assign(FILE *fd, Node *lhs, Node *rhs)
 		default:
 			fatal(lhs, "Invalid lvalue operand of assignment");
 	}
-	fprintf(fd, ";\n");
 }
 
 static void
@@ -471,10 +465,11 @@ emit_expr(FILE *fd, Node *n)
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
 			fprintf(fd, "._udata = {");
 			if (exprtype(n->expr.args[1])->type != Tyvoid) {
-				switch (exprtype(n->expr.args[1])->type) {
+				switch (tybase(exprtype(n->expr.args[1]))->type) {
 				case Tyarray:
 				case Tyslice:
 				case Tystruct:
+				case Tyunion:
 					fprintf(fd, "{");
 					emit_expr(fd, n->expr.args[1]);
 					fprintf(fd, "}");
@@ -946,7 +941,6 @@ emit_stmt(FILE *fd, Node *n)
 
 	assert(n->type == Nblock || n->type == Ndecl || n->type == Nexpr || n->type == Nifstmt || n->type == Nmatchstmt || n->type == Nloopstmt);
 
-	fprintf(fd, "/* ntype:%s */\n", nodestr[n->type]);
 	switch (n->type) {
 	case Nblock:
 		emit_block(fd, n);
@@ -963,7 +957,7 @@ emit_stmt(FILE *fd, Node *n)
 			fprintf(fd, "} else {");
 			emit_stmt(fd, n->ifstmt.iffalse);
 		}
-		fprintf(fd, "}");
+		fprintf(fd, "}\n");
 		break;
 	case Nmatchstmt:
 		emit_match(fd, n);
@@ -974,12 +968,11 @@ emit_stmt(FILE *fd, Node *n)
 		break;
 	case Nexpr:
 		emit_expr(fd, n);
-		fprintf(fd, ";");
+		fprintf(fd, ";\n");
 		break;
 	default:
 		assert(0);
 	}
-	fprintf(fd, "\n");
 }
 
 static void

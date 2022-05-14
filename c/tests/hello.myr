@@ -36,6 +36,6 @@ const main = {
 	var b = 123
 	sys.write(2, "hello world\n")
 	(x, y) = (10, 20)
-	//std.put("byte\n")
+	std.put("byte\n")
 	//var f = {; -> {;->b} }
 }

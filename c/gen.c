@@ -75,6 +75,8 @@ gen(char *out)
 	cflags = "-Wall " \
 		"-Wno-unused-function -Wno-unused-variable -Wno-main" \
 		" -Wno-discarded-qualifiers " \
+		" -Wno-unused-but-set-variable " \
+		" -Wno-strict-aliasing " \
 		  " -O2 -c -x c -g -fno-stack-protector -o";
 
 	snprintf(buf, sizeof(buf), "%s %s %s %s", "cc", cflags, out, infile);
