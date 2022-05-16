@@ -27,6 +27,77 @@
  * 5. function literals are named '_fn{lit.fnval->nid}'
  */
 
+__attribute__((unused)) static char *
+tytystr(Type *t)
+{
+	switch (t->type) {
+	case Tybad:
+		return "bad";
+	case Tyvoid:
+		return "void";
+	case Tybool:
+		return "bool";
+	case Tychar:
+		return "char";
+	case Tyint8:
+		return "int8";
+	case Tyint16:
+		return "int16";
+	case Tyint:
+		return "int";
+	case Tyint32:
+		return "int32";
+	case Tyint64:
+		return "int64";
+	case Tybyte:
+		return "byte";
+	case Tyuint8:
+		return "uint8";
+	case Tyuint16:
+		return "uint16";
+	case Tyuint:
+		return "uint";
+	case Tyuint32:
+		return "uint32";
+	case Tyuint64:
+		return "uint64";
+	case Tyflt32:
+		return "flt32";
+	case Tyflt64:
+		return "flt64";
+	case Tyvalist:
+		return "...";
+	case Tyvar:
+		return "$n";
+	case Typtr:
+		return "ptr";
+	case Tyslice:
+		return "slice";
+	case Tyarray:
+		return "array";
+	case Tycode:
+		return "code";
+	case Tyfunc:
+		return "func";
+	case Tytuple:
+		return "tuple";
+	case Typaram:
+		return "param";
+	case Tyunres:
+		return "unresolved";
+	case Tyname:
+		return "name";
+	case Tygeneric:
+		return "generic";
+	case Tystruct:
+		return "struct";
+	case Tyunion:
+		return "union";
+	case Ntypes:
+		return "not a type";
+	}
+	return "not a type";
+}
 
 char *
 asmname(Node *dcl)
@@ -828,8 +899,10 @@ emit_expr(FILE *fd, Node *n)
 	case Ovar:
 		dcl = decls[n->expr.did];
 		if (dcl->decl.isextern) {
-			fprintf(fd, "%s /* did: %ld */", asmname(dcl), dcl->decl.did);
+			fprintf(fd, "%s", asmname(dcl));
 		} else if (dcl->decl.isglobl) {
+			fprintf(fd, "%s" , asmname(dcl));
+		} else if (dcl->decl.isimport) {
 			fprintf(fd, "%s" , asmname(dcl));
 		} else {
 			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
@@ -873,6 +946,8 @@ emit_objdecl(FILE *fd, Node *n)
 	if (n->decl.isextern) {
 		snprintf(name, sizeof(name), "%s", asmname(n));
 	} else if(n->decl.isglobl) {
+		snprintf(name, sizeof(name), "%s", asmname(n));
+	} else if(n->decl.isimport) {
 		snprintf(name, sizeof(name), "%s", asmname(n));
 	} else {
 		snprintf(name, sizeof(name), "_v%ld", n->decl.did);
@@ -1370,78 +1445,6 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 	fprintf(fd, "}\n\n");
 }
 
-__attribute__((unused)) static char *
-tytystr(Type *t)
-{
-	switch (t->type) {
-	case Tybad:
-		return "bad";
-	case Tyvoid:
-		return "void";
-	case Tybool:
-		return "bool";
-	case Tychar:
-		return "char";
-	case Tyint8:
-		return "int8";
-	case Tyint16:
-		return "int16";
-	case Tyint:
-		return "int";
-	case Tyint32:
-		return "int32";
-	case Tyint64:
-		return "int64";
-	case Tybyte:
-		return "byte";
-	case Tyuint8:
-		return "uint8";
-	case Tyuint16:
-		return "uint16";
-	case Tyuint:
-		return "uint";
-	case Tyuint32:
-		return "uint32";
-	case Tyuint64:
-		return "uint64";
-	case Tyflt32:
-		return "flt32";
-	case Tyflt64:
-		return "flt64";
-	case Tyvalist:
-		return "...";
-	case Tyvar:
-		return "$n";
-	case Typtr:
-		return "ptr";
-	case Tyslice:
-		return "slice";
-	case Tyarray:
-		return "array";
-	case Tycode:
-		return "code";
-	case Tyfunc:
-		return "func";
-	case Tytuple:
-		return "tuple";
-	case Typaram:
-		return "param";
-	case Tyunres:
-		return "unresolved";
-	case Tyname:
-		return "name";
-	case Tygeneric:
-		return "generic";
-	case Tystruct:
-		return "struct";
-	case Tyunion:
-		return "union";
-	case Ntypes:
-		return "not a type";
-	}
-	return "not a type";
-}
-
 static void
 emit_forward_decl_rec(FILE *fd, Type *t, Bitset *visited)
 {
@@ -1838,14 +1841,14 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	Node *n;
 	size_t i, nk;
 
-	fprintf(fd, "/* START OF EXTERNS */\n");
 	k = htkeys(globls, &nk);
+
+	/* imports */
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		fprintf(fd, "/*XXX %s isextern:%d resolved:%d */\n", asmname(n), n->decl.isextern, decltype(n)->resolved);
-		if (decltype(n)->type != Tyfunc && !n->decl.isextern)
-			continue;
 		if (!decltype(n)->resolved)
+			continue;
+		if (!n->decl.isimport)
 			continue;
 		switch (decltype(n)->type) {
 		case Tyfunc:
@@ -1853,6 +1856,39 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 			break;
 		default:
 			emit_objdecl(fd, n);
+		}
+	}
+
+	/* externs */
+	for (i = 0; i < nk; i++) {
+		n = k[i];
+		if (!decltype(n)->resolved)
+			continue;
+		if (n->decl.isimport)
+			continue;
+		if (!n->decl.isextern)
+			continue;
+		switch (decltype(n)->type) {
+		case Tyfunc:
+			continue;
+		default:
+			emit_objdecl(fd, n);
+		}
+	}
+
+	for (i = 0; i < nk; i++) {
+		n = k[i];
+		fprintf(fd, "/*XXX %s resolved:%d isextern:%d isimport:%d vis:%d */\n", asmname(n), decltype(n)->resolved, n->decl.isextern, n->decl.isimport, n->decl.vis);
+		//if (decltype(n)->type != Tyfunc && !n->decl.isextern)
+		//	continue;
+		if (!decltype(n)->resolved)
+			continue;
+		switch (decltype(n)->type) {
+		case Tyfunc:
+			genfuncdecl(fd, n, NULL);
+			break;
+		default:
+			;
 		}
 	}
 	fprintf(fd, "/* END OF EXTERNS */\n");
