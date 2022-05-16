@@ -897,7 +897,24 @@ emit_expr(FILE *fd, Node *n)
 		}
 		break;
 	case Ovar:
-		dcl = decls[n->expr.did];
+		{
+			Stab *ns;
+			/* When an expr comes from imports, the did is not preserved.
+			 * So we have to look it up from the symbol table */
+			if (n->expr.did) {
+				dcl = decls[n->expr.did];
+			} else {
+				ns = curstab();
+				if (n->expr.args[0]->name.ns)
+					ns = getns(n->expr.args[0]->name.ns);
+				dcl = getdcl(ns, n->expr.args[0]);
+				n->expr.did = dcl->decl.did;
+			}
+			assert(dcl);
+		}
+
+
+		//dcl = decls[n->expr.did];
 		if (dcl->decl.isextern) {
 			fprintf(fd, "%s", asmname(dcl));
 		} else if (dcl->decl.isglobl) {
@@ -905,7 +922,7 @@ emit_expr(FILE *fd, Node *n)
 		} else if (dcl->decl.isimport) {
 			fprintf(fd, "%s" , asmname(dcl));
 		} else {
-			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
+			fprintf(fd, "_v%ld /* %s did:%ld op:%s nargs:%ld */", dcl->decl.did, declname(dcl), n->expr.did, opstr[exprop(n)], n->expr.nargs);
 		}
 		break;
 	case Otupget:
@@ -1835,14 +1852,146 @@ gentype(FILE *fd, Type *ty)
 }
 
 static void
+sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
+{
+	Node *dcl;
+	size_t i;
+	Bitset *mark;
+
+	mark = mkbs();
+
+	switch (n->type) {
+	case Nexpr:
+		switch (exprop(n)) {
+		case Ovar:
+			dcl = decls[n->expr.did];
+			sort_decls_rec(out, nout, dcl, visited, count);
+			break;
+		case Olit:
+			switch (n->expr.args[0]->lit.littype) {
+			case Lfunc:
+				sort_decls_rec(out, nout, n->expr.args[0], visited, count);
+				break;
+			default:
+				;
+			}
+			break;
+		default:
+			for (i = 0; i < n->expr.nargs; i++)
+				sort_decls_rec(out, nout, n->expr.args[i], visited, count);
+		}
+		break;
+	case Ndecl:
+		if (bshas(visited, n->decl.did))
+			return;
+		bsput(visited, n->decl.did);
+
+		if (bshas(mark, n->decl.did))
+			die("cyclic decls");
+		bsput(mark, n->decl.did);
+
+		if (n->decl.init)
+			sort_decls_rec(out, nout, n->decl.init, visited, count);
+		bsdel(mark, n->decl.did);
+
+		if (hthas(count, n))
+			die("duplicate decl");
+		htput(count, n, (void *)n);
+
+		if (n->decl.isglobl)
+			linsert(out, nout, 0, n);
+		break;
+	case Nlit:
+		switch (n->lit.littype) {
+		case Lfunc:
+			sort_decls_rec(out, nout, n->lit.fnval, visited, count);
+			break;
+		default:
+			;
+		}
+		break;
+	case Nfunc:
+		sort_decls_rec(out, nout, n->func.body, visited, count);
+		break;
+	case Nblock:
+		for (i = 0; i < n->block.nstmts; i++)
+			sort_decls_rec(out, nout, n->block.stmts[i], visited, count);
+		break;
+	case Nmatchstmt:
+		for (i = 0; i < n->matchstmt.nmatches; i++) {
+			sort_decls_rec(out, nout, n->matchstmt.matches[i], visited, count);
+		}
+		break;
+	case Nmatch:
+		sort_decls_rec(out, nout, n->match.pat, visited, count);
+		sort_decls_rec(out, nout, n->match.block, visited, count);
+		break;
+	case Nloopstmt:
+		sort_decls_rec(out, nout, n->loopstmt.init, visited, count);
+		sort_decls_rec(out, nout, n->loopstmt.cond, visited, count);
+		sort_decls_rec(out, nout, n->loopstmt.step, visited, count);
+		sort_decls_rec(out, nout, n->loopstmt.body, visited, count);
+		break;
+	case Niterstmt:
+		sort_decls_rec(out, nout, n->iterstmt.elt, visited, count);
+		sort_decls_rec(out, nout, n->iterstmt.seq, visited, count);
+		sort_decls_rec(out, nout, n->iterstmt.body, visited, count);
+		break;
+	case Nifstmt:
+		sort_decls_rec(out, nout, n->ifstmt.cond, visited, count);
+		sort_decls_rec(out, nout, n->ifstmt.iftrue, visited, count);
+		if (n->ifstmt.iffalse)
+			sort_decls_rec(out, nout, n->ifstmt.iffalse, visited, count);
+		break;
+	case Nname:
+		break;
+	default:
+		fatal(n, "unexpected node: :%s", nodestr[n->type]);
+	}
+
+	free(mark);
+}
+
+static void
+sort_decls(Node ***out, Node **decls, size_t n)
+{
+	Bitset *visited;
+	size_t nout;
+	size_t i;
+	Htab *count;
+
+	count = mkht(varhash, vareq);
+
+	visited = mkbs();
+	nout = 0;
+	for (i = 0; i < n; i++) {
+		sort_decls_rec(out, &nout, decls[i], visited, count);
+	}
+	bsfree(visited);
+
+	for (i = 0; i < nout; i++) {
+		if (!hthas(count, (*out)[i]))
+			die("unknown decl");
+	}
+
+	free(count);
+	assert(nout == n);
+}
+
+static void
 emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 {
-	void **k;
+	Node **unsorted;
+	Node **k;
 	Node *n;
 	size_t i, nk;
 
-	k = htkeys(globls, &nk);
+	unsorted = (Node **)htkeys(globls, &nk);
 
+	k = NULL;
+	sort_decls(&k, unsorted, nk);
+
+	fprintf(fd, "/* START OF IMPORTS */\n");
 	/* imports */
 	for (i = 0; i < nk; i++) {
 		n = k[i];
@@ -1855,9 +2004,11 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 			genfuncdecl(fd, n, NULL);
 			break;
 		default:
+			fprintf(fd, "/* #%ld*/\n", i);
 			emit_objdecl(fd, n);
 		}
 	}
+	fprintf(fd, "/* END OF IMPORTS */\n");
 
 	/* externs */
 	for (i = 0; i < nk; i++) {
@@ -1878,7 +2029,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		fprintf(fd, "/*XXX %s resolved:%d isextern:%d isimport:%d vis:%d */\n", asmname(n), decltype(n)->resolved, n->decl.isextern, n->decl.isimport, n->decl.vis);
+		fprintf(fd, "/*XXX %s did:%ld resolved:%d isextern:%d isimport:%d isglobl:%d vis:%d */\n", asmname(n), n->decl.did, decltype(n)->resolved, n->decl.isextern, n->decl.isimport, n->decl.isglobl, n->decl.vis);
 		//if (decltype(n)->type != Tyfunc && !n->decl.isextern)
 		//	continue;
 		if (!decltype(n)->resolved)
@@ -1892,6 +2043,8 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		}
 	}
 	fprintf(fd, "/* END OF EXTERNS */\n");
+
+	free(k);
 }
 
 static void
@@ -1932,6 +2085,8 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 {
 	size_t i;
 	Node *init;
+	//Node *dcl;
+	//Stab *ns;
 
 	if (n == NULL || bshas(visited, n->nid)) {
 		return;
@@ -1940,15 +2095,19 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 
 	switch (n->type) {
 	case Nblock:
+		pushstab(n->block.scope);
 		for (i = 0; i < n->block.nstmts; i++) {
 			scan(fnvals, nfnval, fncalls, nfncalls, n->block.stmts[i], visited);
 		}
+		popstab();
 		break;
 	case Nloopstmt:
+		pushstab(n->loopstmt.scope);
 		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.init, visited);
 		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.body, visited);
 		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.step, visited);
 		scan(fnvals, nfnval, fncalls, nfncalls, n->loopstmt.cond, visited);
+		popstab();
 		break;
 	case Niterstmt:
 		scan(fnvals, nfnval, fncalls, nfncalls, n->iterstmt.elt, visited);
@@ -2113,14 +2272,17 @@ genc(FILE *fd)
 		assert(fnvals[i]->type == Nfunc);
 		emit_fnenvty(fd, fnvals[i]);
 	}
+
 	emit_prototypes(fd, globls, refcnts);
 
 	/* Output type descriptors */
 	gentypes(fd);
 
+	fprintf(fd, "/* START OF GLOBAL OBJECT DECLARATIONS */\n");
 	for (i = 0; i < nobjdecls; i++) {
 		emit_objdecl(fd, objdecls[i]);
 	}
+	fprintf(fd, "/* END OF GLOBAL OBJECT DECLARATIONS */\n");
 
 	/* Output all function definitions */
 	for (i = 0; i < nfnvals; i++) {
