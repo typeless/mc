@@ -1857,6 +1857,7 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 	Node *dcl;
 	size_t i;
 	Bitset *mark;
+	Stab *ns;
 
 	mark = mkbs();
 
@@ -1864,8 +1865,13 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 	case Nexpr:
 		switch (exprop(n)) {
 		case Ovar:
-			dcl = decls[n->expr.did];
-			sort_decls_rec(out, nout, dcl, visited, count);
+			ns = curstab();
+			if (n->expr.args[0]->name.ns)
+				ns = getns(n->expr.args[0]->name.ns);
+			dcl = getdcl(ns, n->expr.args[0]);
+			if (dcl) {
+				sort_decls_rec(out, nout, dcl, visited, count);
+			}
 			break;
 		case Olit:
 			switch (n->expr.args[0]->lit.littype) {
@@ -1878,7 +1884,8 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 			break;
 		default:
 			for (i = 0; i < n->expr.nargs; i++)
-				sort_decls_rec(out, nout, n->expr.args[i], visited, count);
+				if (n->expr.args[i]->type == Nexpr)
+					sort_decls_rec(out, nout, n->expr.args[i], visited, count);
 		}
 		break;
 	case Ndecl:
@@ -1899,7 +1906,7 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 		htput(count, n, (void *)n);
 
 		if (n->decl.isglobl)
-			linsert(out, nout, 0, n);
+			lappend(out, nout, n);
 		break;
 	case Nlit:
 		switch (n->lit.littype) {
@@ -1911,11 +1918,15 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 		}
 		break;
 	case Nfunc:
+		pushstab(n->func.scope);
 		sort_decls_rec(out, nout, n->func.body, visited, count);
+		popstab();
 		break;
 	case Nblock:
+		pushstab(n->block.scope);
 		for (i = 0; i < n->block.nstmts; i++)
 			sort_decls_rec(out, nout, n->block.stmts[i], visited, count);
+		popstab();
 		break;
 	case Nmatchstmt:
 		for (i = 0; i < n->matchstmt.nmatches; i++) {
@@ -1927,10 +1938,12 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 		sort_decls_rec(out, nout, n->match.block, visited, count);
 		break;
 	case Nloopstmt:
+		pushstab(n->loopstmt.scope);
 		sort_decls_rec(out, nout, n->loopstmt.init, visited, count);
 		sort_decls_rec(out, nout, n->loopstmt.cond, visited, count);
 		sort_decls_rec(out, nout, n->loopstmt.step, visited, count);
 		sort_decls_rec(out, nout, n->loopstmt.body, visited, count);
+		popstab();
 		break;
 	case Niterstmt:
 		sort_decls_rec(out, nout, n->iterstmt.elt, visited, count);
@@ -1964,9 +1977,11 @@ sort_decls(Node ***out, Node **decls, size_t n)
 
 	visited = mkbs();
 	nout = 0;
+	pushstab(file.globls);
 	for (i = 0; i < n; i++) {
 		sort_decls_rec(out, &nout, decls[i], visited, count);
 	}
+	popstab();
 	bsfree(visited);
 
 	for (i = 0; i < nout; i++) {
@@ -1990,6 +2005,8 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 
 	k = NULL;
 	sort_decls(&k, unsorted, nk);
+	for (i = 0; i < nk; i++)
+		fprintf(fd, "/* sorted(%ld): %s did:%ld */\n", i, declname(k[i]), k[i]->decl.did);
 
 	fprintf(fd, "/* START OF IMPORTS */\n");
 	/* imports */
@@ -2004,7 +2021,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 			genfuncdecl(fd, n, NULL);
 			break;
 		default:
-			fprintf(fd, "/* #%ld*/\n", i);
+			fprintf(fd, "/* #%ld did:%ld*/\n", i, n->decl.did);
 			emit_objdecl(fd, n);
 		}
 	}
@@ -2085,8 +2102,7 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 {
 	size_t i;
 	Node *init;
-	//Node *dcl;
-	//Stab *ns;
+	Node *dcl;
 
 	if (n == NULL || bshas(visited, n->nid)) {
 		return;
@@ -2124,6 +2140,10 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 			scan(fnvals, nfnval, fncalls, nfncalls, n->matchstmt.matches[i], visited);
 		}
 		break;
+	case Nmatch:
+		scan(fnvals, nfnval, fncalls, nfncalls, n->match.pat, visited);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->match.block, visited);
+		break;
 	case Nexpr:
 		switch (exprop(n)) {
 		case Olit:
@@ -2141,13 +2161,18 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
 			break;
 		case Ovar:
-			init = decls[n->expr.did]->decl.init;
-			if (init)
-				scan(fnvals, nfnval, fncalls, nfncalls, init, visited);
+			if (n->expr.did) {
+				dcl = decls[n->expr.did];
+				assert(dcl);
+				init = dcl->decl.init;
+				if (init)
+					scan(fnvals, nfnval, fncalls, nfncalls, init, visited);
+			}
 			break;
 		default:
 			for (size_t i = 0; i < n->expr.nargs; i++) {
-				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
+				if (n->expr.args[i]->type == Nexpr)
+					scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
 			}
 			break;
 		}
@@ -2155,7 +2180,13 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 	case Ndecl:
 		scan(fnvals, nfnval, fncalls, nfncalls, n->decl.init, visited);
 		break;
-	default:;
+	case Nfunc:
+		pushstab(n->func.scope);
+		scan(fnvals, nfnval, fncalls, nfncalls, n->func.body, visited);
+		popstab();
+		break;
+	default:
+		die("Unexpected node");
 	}
 }
 
@@ -2188,7 +2219,6 @@ genc(FILE *fd)
 	fndcl = mkht(fnhash, fneq);
 
 	fillglobls(file.globls, globls);
-	pushstab(file.globls);
 
 	fnvals = NULL;
 	nfnvals = 0;
@@ -2198,6 +2228,7 @@ genc(FILE *fd)
 	nobjdecls = 0;
 
 	visited = mkbs();
+	pushstab(file.globls);
 	for (i = 0; i < file.nstmts; i++) {
 		n = file.stmts[i];
 		if (n->type != Ndecl)
@@ -2212,6 +2243,7 @@ genc(FILE *fd)
 			lappend(&objdecls, &nobjdecls, n);
 		}
 	}
+	popstab();
 	bsfree(visited);
 
 	/* Compute reference counts of functions */
@@ -2294,7 +2326,6 @@ genc(FILE *fd)
 		emit_fndef(fd, fnvals[i], dcl);
 	}
 
-	popstab();
 
 	htfree(fndcl);
 	fprintf(fd, "\n");
