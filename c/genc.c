@@ -1729,6 +1729,7 @@ emit_includes(FILE *fd)
 {
 	char buf[512];
 	char *filename, *psuffix;
+	size_t i;
 
 	fprintf(fd, "#include <stddef.h>\n");
 	fprintf(fd, "#include <stdbool.h>\n");
@@ -1736,14 +1737,17 @@ emit_includes(FILE *fd)
 	fprintf(fd, "#include <stdarg.h>\n");
 	fprintf(fd, "\n");
 
+	for (i = 0; i < file.nfiles; i++) {
+		filename = basename(strdup(file.files[i]));
+		psuffix = strrchr(filename ,'+');
+		if (!psuffix) {
+			psuffix = ".myr";
+		}
 
-	filename = basename(strdup(file.files[0]));
-	psuffix = strrchr(filename ,'+');
-	if (psuffix)
 		swapsuffix(buf, sizeof buf, filename, psuffix, ".h");
-	else
-		swapsuffix(buf, sizeof buf, filename, ".myr", ".h");
-	fprintf(fd, "#include \"%s\"\n", buf);
+		fprintf(fd, "#include \"%s\"\n", buf);
+	}
+	fprintf(fd, "\n");
 }
 
 static size_t
@@ -2324,7 +2328,7 @@ genc(FILE *hd, FILE *fd)
 		fprintf(fd, "/* Filename: %s */\n", file.files[i]);
 	}
 	emit_includes(fd);
-	emit_typedefs(fd);
+	emit_typedefs(hd);
 
 	/* Output all struct defining func env */
 	for (i = 0; i < nfnvals; i++) {
@@ -2332,7 +2336,7 @@ genc(FILE *hd, FILE *fd)
 		emit_fnenvty(fd, fnvals[i]);
 	}
 
-	emit_prototypes(fd, globls, refcnts);
+	emit_prototypes(hd, globls, refcnts);
 
 	/* Output type descriptors */
 	gentypes(fd);
