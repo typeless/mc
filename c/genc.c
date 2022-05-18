@@ -1712,14 +1712,38 @@ emit_typedefs(FILE *fd)
 	bsfree(visited);
 }
 
+static char *
+basename(char *s)
+{
+	/* Copy & paste from musl libc */
+	size_t i;
+	if (!s || !*s) return ".";
+	i = strlen(s)-1;
+	for (; i&&s[i]=='/'; i--) s[i] = 0;
+	for (; i&&s[i-1]!='/'; i--);
+	return s+i;
+}
+
 static void
 emit_includes(FILE *fd)
 {
+	char buf[512];
+	char *filename, *psuffix;
+
 	fprintf(fd, "#include <stddef.h>\n");
 	fprintf(fd, "#include <stdbool.h>\n");
 	fprintf(fd, "#include <stdint.h>\n");
 	fprintf(fd, "#include <stdarg.h>\n");
 	fprintf(fd, "\n");
+
+
+	filename = basename(strdup(file.files[0]));
+	psuffix = strrchr(filename ,'+');
+	if (psuffix)
+		swapsuffix(buf, sizeof buf, filename, psuffix, ".h");
+	else
+		swapsuffix(buf, sizeof buf, filename, ".myr", ".h");
+	fprintf(fd, "#include \"%s\"\n", buf);
 }
 
 static size_t
@@ -1870,6 +1894,7 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 				ns = getns(n->expr.args[0]->name.ns);
 			dcl = getdcl(ns, n->expr.args[0]);
 			if (dcl) {
+				n->expr.did =  dcl->decl.did;
 				sort_decls_rec(out, nout, dcl, visited, count);
 			}
 			break;
@@ -1897,8 +1922,10 @@ sort_decls_rec(Node ***out, size_t *nout, Node *n, Bitset *visited, Htab *count)
 			die("cyclic decls");
 		bsput(mark, n->decl.did);
 
-		if (n->decl.init)
+		if (n->decl.init) {
+			//n->decl.init = fold(n->decl.init, 0);
 			sort_decls_rec(out, nout, n->decl.init, visited, count);
+		}
 		bsdel(mark, n->decl.did);
 
 		if (hthas(count, n))
@@ -2012,7 +2039,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	/* imports */
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (!decltype(n)->resolved)
+		if (!decltype(n)->resolved && !decltype(n)->isimport)
 			continue;
 		if (!n->decl.isimport)
 			continue;
@@ -2203,7 +2230,7 @@ fneq(void *a, void *b)
 }
 
 void
-genc(FILE *fd)
+genc(FILE *hd, FILE *fd)
 {
 	Node *n;
 	size_t i;

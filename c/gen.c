@@ -48,10 +48,15 @@ initconsts(Htab *globls)
 void
 gen(char *out)
 {
-	FILE *fd;
+	FILE *fd, *hd;
 	char buf[1024];
 	char *infile;
 	char *cflags;
+
+	swapsuffix(buf, sizeof buf, out, ".o", ".h");
+	hd = fopen(buf, "w");
+	if (!hd)
+		die("Couldn't open fd %s", buf);
 
 	swapsuffix(buf, sizeof buf, out, ".o", ".c");
 	fd = fopen(buf, "w");
@@ -69,8 +74,9 @@ gen(char *out)
 	//	die("Couldn't open fd %s", buf);
 	//  }
 
-	genc(fd);
+	genc(hd, fd);
 	fclose(fd);
+	fclose(hd);
 
 	cflags = "-Wall " \
 		"-Wno-unused-function -Wno-unused-variable -Wno-main" \

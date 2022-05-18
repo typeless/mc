@@ -57,4 +57,4 @@ size_t blobsz(Blob *b);
 
 size_t size(Node *n);
 void gen(char *out);
-void genc(FILE *fd);
+void genc(FILE *hd, FILE *fd);
