@@ -436,6 +436,7 @@ emit_assign(FILE *fd, Node *lhs, Node *rhs)
 		default:
 			fatal(lhs, "Invalid lvalue operand of assignment");
 	}
+	fprintf(fd, ";\n");
 }
 
 static void
