@@ -1712,7 +1712,7 @@ emit_typedefs(FILE *fd)
 	bsfree(visited);
 }
 
-static char *
+char *
 basename(char *s)
 {
 	/* Copy & paste from musl libc */
@@ -1745,7 +1745,7 @@ emit_includes(FILE *fd)
 		}
 
 		swapsuffix(buf, sizeof buf, filename, psuffix, ".h");
-		fprintf(fd, "#include \"%s\"\n", buf);
+		fprintf(fd, "//#include \"%s\"\n", buf);
 	}
 	fprintf(fd, "\n");
 }
@@ -2328,7 +2328,7 @@ genc(FILE *hd, FILE *fd)
 		fprintf(fd, "/* Filename: %s */\n", file.files[i]);
 	}
 	emit_includes(fd);
-	emit_typedefs(hd);
+	emit_typedefs(fd);
 
 	/* Output all struct defining func env */
 	for (i = 0; i < nfnvals; i++) {
@@ -2336,7 +2336,7 @@ genc(FILE *hd, FILE *fd)
 		emit_fnenvty(fd, fnvals[i]);
 	}
 
-	emit_prototypes(hd, globls, refcnts);
+	emit_prototypes(fd, globls, refcnts);
 
 	/* Output type descriptors */
 	gentypes(fd);
