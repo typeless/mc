@@ -1328,13 +1328,13 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	}
 
 	fprintf(fd, "/* vis:%d isimport:%d\n*/\n", n->decl.vis, n->decl.isimport);
-	if (n->decl.isextern) {
+	if (n->decl.isextern || n->decl.isimport) {
 		fprintf(fd, "extern ");
 	}
 	if (n->decl.vis == Vishidden) {
 		fprintf(fd, "__attribute__((visibility(\"hidden\"))) ");
 	}
-	if (!n->decl.isextern && n->decl.isglobl) {
+	if (!n->decl.isextern && !n->decl.isimport && n->decl.isglobl) {
 		if (n->decl.vis == Visintern) {
 			if (!streq(declname(n), "__init__") && !streq(declname(n), "__fini__") && !streq(declname(n), "main")) {
 				fprintf(fd, "static ");
