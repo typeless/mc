@@ -18,7 +18,7 @@
 #include "asm.h"
 #include "../config.h"
 
-#define __UNUSED __attribute__((unused))
+#define __USED __attribute__((used))
 /**
  * Conventions:
  * 1. Types are named '_Ty{tid}'
@@ -28,7 +28,7 @@
  * 5. function literals are named '_fn{lit.fnval->nid}'
  */
 
-__UNUSED static char *
+__USED static char *
 __ty(Type *t)
 {
 	char buf[128];
@@ -37,7 +37,7 @@ __ty(Type *t)
 	return strdup(buf);
 }
 
-__UNUSED static char *
+__USED static char *
 tytystr(Type *t)
 {
 	switch (t->type) {
@@ -2013,7 +2013,7 @@ sort_decls_rec(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Nod
 	free(mark);
 }
 
-__UNUSED static void
+__USED static void
 sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Node **decls, size_t n)
 {
 	Bitset *visited;
