@@ -1952,6 +1952,7 @@ sort_decls_rec(
 			default:
 				;
 			}
+			sort_types_rec(utypes, nutypes, n->expr.type, tyvisited);
 			break;
 		default:
 			for (i = 0; i < n->expr.nargs; i++)
