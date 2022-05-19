@@ -247,7 +247,7 @@ emit_type(FILE *fd, Type *t)
 	case Tyuint64:
 	case Tyflt32:
 	case Tyflt64:
-		fprintf(fd, " _Ty%d", t->tid);
+		fprintf(fd, " %s", __ty(t));
 		break;
 	case Tyvalist:
 		fprintf(fd, "...");
@@ -278,7 +278,7 @@ emit_type(FILE *fd, Type *t)
 		fprintf(fd, "struct {");
 		for (i = 0; i < t->nmemb; i++) {
 			// emit_type(fd, decltype(t->sdecls[i]));
-			fprintf(fd, "_Ty%d", decltype(t->sdecls[i])->tid);
+			fprintf(fd, "%s", __ty(decltype(t->sdecls[i])));
 			fprintf(fd, " %s;", declname(t->sdecls[i]));
 		}
 		fprintf(fd, "}");
@@ -304,7 +304,7 @@ emit_type(FILE *fd, Type *t)
 		break;
 	case Tyfunc:
 		fprintf(fd, "typeof(");
-		fprintf(fd, "_Ty%d ", t->sub[0]->tid);
+		fprintf(fd, "%s ", __ty(t->sub[0]));
 		// emit_type(fd, t->sub[0]);
 		fprintf(fd, " (*)(");
 		if (t->nsub > 1) {
@@ -313,7 +313,7 @@ emit_type(FILE *fd, Type *t)
 				if (t->sub[i]->type == Tyvalist) {
 					fprintf(fd, "...");
 				} else {
-					fprintf(fd, "_Ty%d", t->sub[i]->tid);
+					fprintf(fd, "%s", __ty(t->sub[i]));
 				}
 				if (i + 1 < t->nsub) {
 					fprintf(fd, ", ");
@@ -332,11 +332,9 @@ emit_type(FILE *fd, Type *t)
 		break;
 		break;
 	case Typaram:
-		fprintf(fd, "_Ty%d /* Typaram %s */", t->tid, tystr(t));
-		break;
 	case Tyvar:
 		die("Should not have Tyvar");
-		fprintf(fd, "_Ty%d", t->tid);
+		fprintf(fd, "%s", __ty(t));
 		// emit_type(fd, tytab[t->tid]);
 		break;
 	default:
@@ -501,7 +499,7 @@ emit_expr(FILE *fd, Node *n)
 			break;
 		case Lstr:
 			// fprintf(fd, "\"%.*s\"", (int)args[0]->lit.strval.len, args[0]->lit.strval.buf);
-			fprintf(fd, "(_Ty%d){(uint8_t *)\"", n->expr.type->tid);
+			fprintf(fd, "(%s){(uint8_t *)\"", __ty(n->expr.type));
 			for (i = 0; i < args[0]->lit.strval.len; i++) {
 				ch = args[0]->lit.strval.buf[i];
 				if (iscntrl(ch) || ch == '\\' || ch == '\"' || ch == '\'') {
@@ -530,7 +528,7 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Oarr:
 		fprintf(fd, "(");
-		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
+		fprintf(fd, "(const %s)", __ty(tysearch(exprtype(n))));
 
 		fprintf(fd," {.elem = {");
 		for (i = 0; i < n->expr.nargs; i++) {
@@ -544,7 +542,7 @@ emit_expr(FILE *fd, Node *n)
 	case Otup:
 	case Ostruct:
 		fprintf(fd, "(");
-		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
+		fprintf(fd, "(const %s)", __ty(tysearch(exprtype(n))));
 
 		fprintf(fd," {");
 		for (i = 0; i < n->expr.nargs; i++) {
@@ -558,7 +556,7 @@ emit_expr(FILE *fd, Node *n)
 	case Oucon:
 		uc = finducon(tybase(exprtype(n)), n->expr.args[0]);
 		fprintf(fd, "(");
-		fprintf(fd, "(const _Ty%d)", tysearch(exprtype(n))->tid);
+		fprintf(fd, "(const %s)", __ty(tysearch(exprtype(n))));
 		fprintf(fd," {");
 		fprintf(fd, "._utag = %ld,", uc->id);
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
@@ -812,19 +810,19 @@ emit_expr(FILE *fd, Node *n)
 	case Oslice:
 		switch (exprtype(args[0])->type) {
 		case Tyarray:
-			fprintf(fd, "(_Ty%d){(", n->expr.type->tid);
+			fprintf(fd, "(%s){(", __ty(n->expr.type));
 			emit_expr(fd, n->expr.args[0]);
 			fprintf(fd, ").elem + %lld", n->expr.args[1]->lit.intval);
 			fprintf(fd, ", %lld}", args[2]->lit.intval);
 			break;
 		case Tyslice:
-			fprintf(fd, "(_Ty%d){(", n->expr.type->tid);
+			fprintf(fd, "(%s){(", __ty(n->expr.type));
 			emit_expr(fd, n->expr.args[0]);
 			fprintf(fd, ").p + %lld", n->expr.args[1]->lit.intval);
 			fprintf(fd, ", %lld}", args[2]->lit.intval);
 			break;
 		case Typtr:
-			fprintf(fd, "(_Ty%d){", n->expr.type->tid);
+			fprintf(fd, "(%s){", __ty(n->expr.type));
 			emit_expr(fd, n->expr.args[0]);
 			fprintf(fd, " + %lld", n->expr.args[1]->lit.intval);
 			fprintf(fd, ", %lld}", args[2]->lit.intval);
@@ -857,14 +855,14 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Osize:
 		fprintf(fd, "sizeof(");
-		fprintf(fd, "_Ty%d", args[0]->decl.type->tid);
+		fprintf(fd, "%s", __ty(args[0]->decl.type));
 		fprintf(fd, ")");
 		break;
 	case Ocall:
 		emit_call(fd, n);
 		break;
 	case Ocast:
-		fprintf(fd, "((_Ty%d)(", exprtype(n)->tid);
+		fprintf(fd, "((%s)(", __ty(exprtype(n)));
 		switch (exprtype(n->expr.args[0])->type) {
 		case Tyslice:
 			emit_expr(fd, n->expr.args[0]);
@@ -970,7 +968,7 @@ emit_objdecl(FILE *fd, Node *n)
 		fprintf(fd, "const ");
 	}
 
-	fprintf(fd, "_Ty%d ", tysearch(decltype(n))->tid);
+	fprintf(fd, "%s ", __ty(tysearch(decltype(n))));
 	if (n->decl.isextern) {
 		snprintf(name, sizeof(name), "%s", asmname(n));
 	} else if(n->decl.isglobl) {
@@ -1036,7 +1034,7 @@ emit_match(FILE *fd, Node *n)
 	fprintf(fd, "do {\n");
 
 	// emit_type(fd, exprtype(val));
-	fprintf(fd, "_Ty%d _v%d = ", exprtype(val)->tid, val->nid);
+	fprintf(fd, "%s _v%d = ", __ty(exprtype(val)), val->nid);
 	// fprintf(fd, "_Ty%d _v%d = ", exprtype(val)->tid, val->nid);
 	emit_expr(fd, val);
 	fprintf(fd, ";");
@@ -1352,7 +1350,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 			}
 		}
 	}
-	fprintf(fd, "_Ty%d ", t->sub[0]->tid);
+	fprintf(fd, "%s ", __ty(t->sub[0]));
 	fprintf(fd, "%s(", asmname(n));
 
 	if (nenv > 0) {
@@ -1367,7 +1365,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 			if (t->sub[i]->type == Tyvalist)
 				fprintf(fd, "...");
 			else
-				fprintf(fd, "_Ty%d ", t->sub[i]->tid);
+				fprintf(fd, "%s ", __ty(t->sub[i]));
 
 			if (i - 1 < nargs) {
 				Node *dcl = args[i - 1];
@@ -1403,7 +1401,7 @@ emit_fnenvty(FILE *fd, Node *n)
 		fprintf(fd, "struct _envty$%d {\n", n->nid);
 		for (size_t i = 0; i < nenv; i++) {
 			Type *envty = decltype(env[i]);
-			fprintf(fd, "\t_Ty%d /* %s */ _v%ld /* %s */;\n", envty->tid, tystr(envty), env[i]->decl.did, declname(env[i]));
+			fprintf(fd, "\t%s /* %s */ _v%ld /* %s */;\n", __ty(envty), tystr(envty), env[i]->decl.did, declname(env[i]));
 		}
 		fprintf(fd, "};\n\n");
 	}
@@ -1434,7 +1432,7 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 		}
 	}
 
-	fprintf(fd, "_Ty%d\n", t->sub[0]->tid);
+	fprintf(fd, "%s\n", __ty(t->sub[0]));
 
 	if (dcl)
 		fprintf(fd, "%s(", asmname(dcl));
@@ -1449,7 +1447,7 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 		fprintf(fd, "void");
 	} else {
 		for (size_t i = 1; i < t->nsub; i++) {
-			fprintf(fd, "_Ty%d ", t->sub[i]->tid);
+			fprintf(fd, "%s ", __ty(t->sub[i]));
 			if (i - 1 < nargs) {
 				Node *dcl = args[i - 1];
 				fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
@@ -1466,7 +1464,7 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 
 	for (size_t i = 0; i < nenv; i++) {
 		Type *envty = decltype(env[i]);
-		fprintf(fd, "\t_Ty%d /* %s */ _v%ld = %s->_v%ld;\n", envty->tid, tystr(envty), env[i]->decl.did, "$env", env[i]->decl.did);
+		fprintf(fd, "\t%s /* %s */ _v%ld = %s->_v%ld;\n", __ty(envty), tystr(envty), env[i]->decl.did, "$env", env[i]->decl.did);
 	}
 
 	emit_func(fd, n);
@@ -1489,10 +1487,10 @@ emit_forward_decl_rec(FILE *fd, Type *t, Bitset *visited)
 			if (tn->type == Tyname) {
 				ts = tysearch(tn->sub[0]);
 				if (ts->type == Tystruct) {
-					fprintf(fd, "struct _Ty%d;\n", ts->tid);
-					fprintf(fd, "typedef struct _Ty%d _Ty%d;/*ty=%s -> %s*/\n", ts->tid, ts->tid, tytystr(ts), tytystr(ts));
-					fprintf(fd, "typedef _Ty%d _Ty%d;\n", ts->tid, tn->tid);
-					fprintf(fd, "typedef _Ty%d *_Ty%d; /*ty=%s -> %s*/\n", tn->tid, t->tid, tytystr(tn), tytystr(t));
+					fprintf(fd, "struct %s;\n", __ty(ts));
+					fprintf(fd, "typedef struct %s %s;/*ty=%s -> %s*/\n", __ty(ts), __ty(ts), tytystr(ts), tytystr(ts));
+					fprintf(fd, "typedef %s %s;\n", __ty(ts), __ty(tn));
+					fprintf(fd, "typedef %s *%s; /*ty=%s -> %s*/\n", __ty(tn), __ty(t), tytystr(tn), tytystr(t));
 				}
 			}
 		}
@@ -1521,73 +1519,73 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 
 	switch (t->type) {
 	case Tyvoid:
-		fprintf(fd, "typedef void _Ty%d; /* Tyvoid */", t->tid);
+		fprintf(fd, "typedef void %s; /* Tyvoid */", __ty(t));
 		break;
 	case Tybool:
-		fprintf(fd, "typedef bool _Ty%d; /* Tybool */", t->tid);
+		fprintf(fd, "typedef bool %s; /* Tybool */", __ty(t));
 		break;
 	case Tychar:
-		fprintf(fd, "typedef uint32_t _Ty%d; /* Tychar */", t->tid);
+		fprintf(fd, "typedef uint32_t %s; /* Tychar */", __ty(t));
 		break;
 	case Tyint8:
-		fprintf(fd, "typedef int8_t _Ty%d; /* Tyint8 */", t->tid);
+		fprintf(fd, "typedef int8_t %s; /* Tyint8 */", __ty(t));
 		break;
 	case Tyint16:
-		fprintf(fd, "typedef int8_t _Ty%d; /* Tyint16 */", t->tid);
+		fprintf(fd, "typedef int8_t %s; /* Tyint16 */", __ty(t));
 		break;
 	case Tyint32:
-		fprintf(fd, "typedef int8_t _Ty%d; /* Tyint32 */", t->tid);
+		fprintf(fd, "typedef int8_t %s; /* Tyint32 */", __ty(t));
 		break;
 	case Tyint:
-		fprintf(fd, "typedef int _Ty%d; /* Tyint */", t->tid);
+		fprintf(fd, "typedef int %s; /* Tyint */", __ty(t));
 		break;
 	case Tyint64:
-		fprintf(fd, "typedef int64_t _Ty%d; /* Tyint64 */", t->tid);
+		fprintf(fd, "typedef int64_t %s; /* Tyint64 */", __ty(t));
 		break;
 	case Tybyte:
-		fprintf(fd, "typedef uint8_t _Ty%d; /* Tybyte */", t->tid);
+		fprintf(fd, "typedef uint8_t %s; /* Tybyte */", __ty(t));
 		break;
 	case Tyuint8:
-		fprintf(fd, "typedef uint8_t _Ty%d; /* Tyuint8 */", t->tid);
+		fprintf(fd, "typedef uint8_t %s; /* Tyuint8 */", __ty(t));
 		break;
 	case Tyuint16:
-		fprintf(fd, "typedef uint16_t _Ty%d; /* Tyuint16 */", t->tid);
+		fprintf(fd, "typedef uint16_t %s; /* Tyuint16 */", __ty(t));
 		break;
 	case Tyuint32:
-		fprintf(fd, "typedef uint32_t _Ty%d; /* Tyuint32_t*/", t->tid);
+		fprintf(fd, "typedef uint32_t %s; /* Tyuint32_t*/", __ty(t));
 		break;
 	case Tyuint:
-		fprintf(fd, "typedef unsigned int _Ty%d; /* Tyuint */", t->tid);
+		fprintf(fd, "typedef unsigned int %s; /* Tyuint */", __ty(t));
 		break;
 	case Tyuint64:
-		fprintf(fd, "typedef uint64_t _Ty%d; /* Tyuint64 */", t->tid);
+		fprintf(fd, "typedef uint64_t %s; /* Tyuint64 */", __ty(t));
 		break;
 	case Tyflt32:
-		fprintf(fd, "typedef float _Ty%d; /* Tyflt32 */", t->tid);
+		fprintf(fd, "typedef float %s; /* Tyflt32 */", __ty(t));
 		break;
 	case Tyflt64:
-		fprintf(fd, "typedef double _Ty%d; /* Tyflt64 */", t->tid);
+		fprintf(fd, "typedef double %s; /* Tyflt64 */", __ty(t));
 		break;
 	case Tyvalist:
-		fprintf(fd, "typedef __builtin_va_list _Ty%d; /* Tyvalist */", t->tid);
+		fprintf(fd, "typedef __builtin_va_list %s; /* Tyvalist */", __ty(t));
 		break;
 	case Typtr:
 		emit_typedef_rec(fd, t->sub[0], visited);
 		fprintf(fd, "typedef ");
-		fprintf(fd, "_Ty%d * _Ty%d;", t->sub[0]->tid, t->tid);
+		fprintf(fd, "%s * %s;", __ty(t->sub[0]), __ty(t));
 		fprintf(fd, "/* %s -> %s*/", tytystr(t->sub[0]), tytystr(tybase(t->sub[0])));
 		break;
 	case Tyarray:
 		emit_typedef_rec(fd, t->sub[0], visited);
 
 		fprintf(fd, "typedef struct {");
-		fprintf(fd, "_Ty%d ", t->sub[0]->tid);
+		fprintf(fd, "%s ", __ty(t->sub[0]));
 		if (t->asize) {
 			fprintf(fd, "elem[%lld];", t->asize->expr.args[0]->lit.intval);
 		} else {
 			fprintf(fd, "elem[0];");
 		}
-		fprintf(fd, "} _Ty%d;", t->tid);
+		fprintf(fd, "} %s;", __ty(t));
 		break;
 	case Tytuple:
 		for (i = 0; i < t->nsub; i++) {
@@ -1595,26 +1593,26 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		}
 		fprintf(fd, "typedef struct {");
 		for (i = 0; i < t->nsub; i++) {
-			fprintf(fd, "_Ty%d _%ld;", t->sub[i]->tid, i);
+			fprintf(fd, "%s _%ld;", __ty(t->sub[i]), i);
 		}
-		fprintf(fd, "} _Ty%d;", t->tid);
+		fprintf(fd, "} %s;", __ty(t));
 		// fprintf(fd, "typedef ");
 		// emit_type(fd, t);
-		// fprintf(fd, " _Ty%d;\n", t->tid);
+		// fprintf(fd, " %s;\n", __ty(t));
 		break;
 	case Tystruct:
 		for (i = 0; i < t->nmemb; i++) {
 			emit_typedef_rec(fd, decltype(t->sdecls[i]), visited);
 		}
 		//fprintf(fd, "typedef struct {");
-		fprintf(fd, "struct _Ty%d {", t->tid);
+		fprintf(fd, "struct %s {", __ty(t));
 		for (i = 0; i < t->nmemb; i++) {
-			fprintf(fd, "_Ty%d", decltype(t->sdecls[i])->tid);
+			fprintf(fd, "%s", __ty(decltype(t->sdecls[i])));
 			fprintf(fd, " %s;", declname(t->sdecls[i]));
 		}
-		//fprintf(fd, "} _Ty%d;", t->tid);
+		//fprintf(fd, "} %s;", __ty(t));
 		fprintf(fd, "};\n");
-		fprintf(fd, "typedef struct _Ty%d _Ty%d;\n", t->tid, t->tid);
+		fprintf(fd, "typedef struct %s %s;\n", __ty(t), __ty(t));
 		break;
 	case Tyunion:
 		for (i = 0; i < t->nmemb; i++) {
@@ -1628,21 +1626,21 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 			char *name = t->udecls[i]->name->name.name;
 			Type *etype = t->udecls[i]->etype;
 			if (etype && tybase(etype)->type != Tyvoid) {
-				fprintf(fd, "_Ty%d %s%s%s;", t->udecls[i]->etype->tid, ns ? ns : "", ns ? "$" : "", name);
+				fprintf(fd, "%s %s%s%s;", __ty(t->udecls[i]->etype), ns ? ns : "", ns ? "$" : "", name);
 			} else {
 				fprintf(fd, "/* no etype */");
 			}
 		}
 		fprintf(fd, "} _udata;");
-		fprintf(fd, "} _Ty%d;", t->tid);
+		fprintf(fd, "} %s;", __ty(t));
 		break;
 	case Tyslice:
 		emit_typedef_rec(fd, t->sub[0], visited);
 
 		fprintf(fd, "typedef ");
 		// emit_type(fd, t);
-		fprintf(fd, "struct { _Ty%d *p; size_t len; }", t->sub[0]->tid);
-		fprintf(fd, " _Ty%d;", t->tid);
+		fprintf(fd, "struct { %s *p; size_t len; }", __ty(t->sub[0]));
+		fprintf(fd, " %s;", __ty(t));
 		break;
 	case Tyfunc:
 		for (i = 0; i < t->nsub; i++) {
@@ -1650,7 +1648,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		}
 		fprintf(fd, "typedef ");
 		emit_type(fd, t);
-		fprintf(fd, " _Ty%d; /* Tyfunc */", t->tid);
+		fprintf(fd, " %s; /* Tyfunc */", __ty(t));
 		break;
 	case Tyname:
 	case Tygeneric:
@@ -1660,12 +1658,12 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "typedef ");
 		// emit_type(fd, t->sub[0]);
 		//  fprintf(fd, " %s%s%s;\n", hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
-		fprintf(fd, "_Ty%d _Ty%d; /*%s%s%s*/", t->sub[0]->tid, t->tid, hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
-		//fprintf(fd, "struct { _Ty%d _; } _Ty%d ;; /*%s%s%s*/", t->sub[0]->tid, t->tid, hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
+		fprintf(fd, "%s %s; /*%s%s%s*/", __ty(t->sub[0]), __ty(t), hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
+		//fprintf(fd, "struct { %s _; } %s ;; /*%s%s%s*/", __ty(t->sub[0]), __ty(t), hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
 		break;
 	case Typaram:
 		fprintf(fd, "typedef struct {}");
-		fprintf(fd, "_Ty%d;", t->tid);
+		fprintf(fd, "%s;", __ty(t));
 		break;
 	case Tyvar:
 		fprintf(fd, "/* Tyvar %d*/", t->tid);
