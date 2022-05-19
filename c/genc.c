@@ -326,6 +326,7 @@ emit_type(FILE *fd, Type *t)
 		fprintf(fd, "_Ty%d /* Typaram %s */", t->tid, tystr(t));
 		break;
 	case Tyvar:
+		die("Should not have Tyvar");
 		fprintf(fd, "_Ty%d", t->tid);
 		// emit_type(fd, tytab[t->tid]);
 		break;

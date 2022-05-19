@@ -17,7 +17,8 @@ test:
 	cd ..; MYR_MC=c/cm mbld clean lib/std:std:
 	cd ..; MYR_MC=c/cm mbld -j1 lib/sys:sys 2>&1 | head -n 60 | tee sys.txt
 	cd ..; MYR_MC=c/cm mbld -j1 lib/std:std 2>&1 | head -n 60 | tee std.txt
-	MYR_MC=./cm mbld -I../obj/lib/sys -o obj -b hello tests/hello.myr 2>&1 | tee hello.txt
+	ld --gc-sections -o obj/hello /home/mural/src/myrlang.org/mc/out/lib/myr/_myrrt.o obj/tests/hello.o -L../obj/lib/std -lstd -L../obj/lib/sys -lsys
+	#MYR_MC=./cm mbld -I../obj/lib/sys -o obj -b hello tests/hello.myr 2>&1 | tee hello.txt
 
 gdb:
 	gdb --args ./cm -o out tests/hello.myr
