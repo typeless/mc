@@ -33,7 +33,7 @@ __ty(Type *t)
 {
 	char buf[128];
 
-	snprintf(buf, sizeof(buf), "_Ty%d", tyeqvcls(t)->tid);
+	snprintf(buf, sizeof(buf), "_Ty%d", tydedup(t)->tid);
 	return strdup(buf);
 }
 
@@ -1309,7 +1309,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	Node **args, **env;
 	size_t nargs, nenv;
 
-	t = tyeqvcls(decltype(n));
+	t = tydedup(decltype(n));
 
 	assert(n->type == Ndecl);
 	assert(t->type == Tyfunc || t->type == Tycode);
@@ -1851,7 +1851,7 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 	Type *u;
 	size_t i;
 
-	t = tyeqvcls(t);
+	t = tydedup(t);
 
 	if (bshas(visited, t->tid))
 		return;

@@ -18,7 +18,6 @@ typedef struct Typename Typename;
 typedef struct Typair Typair;
 Type **tytab = NULL;
 Type **types = NULL;
-Type **tyeqv = NULL;
 size_t ntypes;
 Trait **traittab;
 size_t ntraittab;
@@ -116,8 +115,6 @@ mktype(Srcloc loc, Ty ty)
 	tytab[t->tid] = NULL;
 	types = xrealloc(types, ntypes * sizeof(Type *));
 	types[t->tid] = t;
-	tyeqv = xrealloc(tyeqv, ntypes * sizeof(Type *));
-	tyeqv[t->tid] = NULL;
 	if (ty <= Tyvalist) /* the last builtin atomic type */
 		t->vis = Visbuiltin;
 

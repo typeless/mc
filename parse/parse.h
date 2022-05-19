@@ -376,7 +376,6 @@ extern char *filename;
 extern Tok *curtok;	/* the last token we tokenized */
 extern Type **tytab;	/* type -> type map used by inference. size maintained by type creation code */
 extern Type **types;
-extern Type **tyeqv;
 extern size_t ntypes;
 extern Trait **traittab;/* int -> trait map */
 extern size_t ntraittab;
@@ -576,10 +575,8 @@ Node *fold(Node *n, int foldvar);
 int getintlit(Node *lit, vlong *val);
 
 /* typechecking/inference */
-Type *unify(Node *ctx, Type *a, Type *b);
 void infer(void);
 Type *tysearch(Type *t);
-Type *tyeqvcls(Type *t);
 
 /* debug */
 void dump(FILE *);
