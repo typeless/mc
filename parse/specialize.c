@@ -578,7 +578,6 @@ specializedcl(Node *gnode, Type *param, Type *to, Node **name)
 	d->decl.isextern = g->decl.isextern;
 	d->decl.isglobl = g->decl.isglobl;
 	d->decl.init = specializenode(g->decl.init, tsmap);
-	unify(d, d->decl.type, d->decl.init->expr.type);
 	putdcl(st, d);
 
 	fixup(d);
