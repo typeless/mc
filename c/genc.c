@@ -1891,10 +1891,61 @@ gentype(FILE *fd, Type *ty)
 static void
 sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 {
+	Type *u;
+	size_t i;
+
 	if (bshas(visited, t->tid))
 		return;
 	bsput(visited, t->tid);
 
+	switch (t->type) {
+	case Tyvoid:
+	case Tybool:
+	case Tychar:
+	case Tyint8:
+	case Tyint16:
+	case Tyint32:
+	case Tyint:
+	case Tyint64:
+	case Tybyte:
+	case Tyuint8:
+	case Tyuint16:
+	case Tyuint32:
+	case Tyuint:
+	case Tyuint64:
+	case Tyflt32:
+	case Tyflt64:
+	case Tyvalist:
+		break;
+	case Typtr:
+	case Tyarray:
+	case Tyslice:
+	case Tytuple:
+	case Tyfunc:
+	case Tyname:
+		for (i = 0; i < t->nsub; i++)
+			sort_types_rec(utypes, nutypes, t->sub[i], visited);
+		break;
+	case Tystruct:
+		for (i = 0; i < t->nmemb; i++) {
+			sort_types_rec(utypes, nutypes, decltype(t->sdecls[i]), visited);
+		}
+		break;
+	case Tyunion:
+		for (i = 0; i < t->nmemb; i++) {
+			u = t->udecls[i]->etype;
+			if (u)
+				sort_types_rec(utypes, nutypes, u, visited);
+		}
+		break;
+	case Tygeneric:
+	case Typaram:
+	case Tyvar:
+	default:
+		fprintf(stderr, "/* Invalid type: %s id: %d */", tystr(t), t->tid);
+		assert(0);
+	}
+	lappend(utypes, nutypes, t);
 }
 
 static void
@@ -2046,8 +2097,12 @@ sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Type **
 	tyvisited = mkbs();
 	pushstab(file.globls);
 	for (i = 0; i < n; i++) {
-		if (!decls[i]->decl.isimport)
-			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, decls[i], visited, tyvisited, count);
+		if (decls[i]->decl.isimport)
+			continue;
+		if (decls[i]->decl.isgeneric)
+			continue;
+
+		sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, decls[i], visited, tyvisited, count);
 	}
 	popstab();
 	bsfree(tyvisited);
@@ -2077,6 +2132,8 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	k = NULL;
 	nimports = 0;
 	imports = NULL;
+	nutypes = 0;
+	utypes = NULL;
 	sort_decls(&k, &nk, &imports, &nimports, &utypes, &nutypes, unsorted, nglobls);
 	for (i = 0; i < nk; i++)
 		fprintf(fd, "/* sorted(%ld): %s did:%ld */\n", i, declname(k[i]), k[i]->decl.did);
