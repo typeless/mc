@@ -28,7 +28,16 @@
  * 5. function literals are named '_fn{lit.fnval->nid}'
  */
 
-__attribute__((unused)) static char *
+__UNUSED static char *
+__ty(Type *t)
+{
+	char buf[128];
+
+	snprintf(buf, sizeof(buf), "_Ty%d", tyeqvcls(t)->tid);
+	return strdup(buf);
+}
+
+__UNUSED static char *
 tytystr(Type *t)
 {
 	switch (t->type) {
