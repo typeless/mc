@@ -1955,9 +1955,19 @@ sort_decls_rec(
 			break;
 		default:
 			for (i = 0; i < n->expr.nargs; i++)
-				if (n->expr.args[i]->type == Nexpr) {
+				switch (n->expr.args[i]->type) {
+				case Nexpr:
 					sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->expr.args[i], visited, tyvisited, count);
 					sort_types_rec(utypes, nutypes, n->expr.args[i]->expr.type, tyvisited);
+					break;
+				case Ndecl:
+					sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->expr.args[i], visited, tyvisited, count);
+					sort_types_rec(utypes, nutypes, n->expr.args[i]->decl.type, tyvisited);
+					break;
+				case Nname:
+					break;
+				default:
+					assert(0);
 				}
 		}
 		break;
