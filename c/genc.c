@@ -1888,6 +1888,9 @@ sort_decls_rec(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Nod
 	Bitset *mark;
 	Stab *ns;
 
+	if (!n)
+		return;
+
 	mark = mkbs();
 
 	switch (n->type) {

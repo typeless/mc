@@ -540,6 +540,7 @@ specializedcl(Node *gnode, Type *param, Type *to, Node **name)
 	Tysubst *tsmap;
 	Node *g, *d, *n;
 	Stab *st;
+	Type *t;
 
 	assert(gnode->type == Ndecl);
 	assert(gnode->decl.isgeneric);
@@ -573,7 +574,9 @@ specializedcl(Node *gnode, Type *param, Type *to, Node **name)
 	tsmap = mksubst();
 	fillsubst(tsmap, to, g->decl.type);
 
-	d = mkdecl(g->loc, n, tysubst(g->decl.type, tsmap));
+	t = tysubst(g->decl.type, tsmap);
+	unify(n, t, to);
+	d = mkdecl(g->loc, n, t);
 	d->decl.isconst = g->decl.isconst;
 	d->decl.isextern = g->decl.isextern;
 	d->decl.isglobl = g->decl.isglobl;

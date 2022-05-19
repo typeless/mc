@@ -47,7 +47,7 @@ static Type *tyfreshen(Tysubst *subst, Type *orig);
 static Type *tf(Type *t);
 static Type *basetype(Type *a);
 
-static Type *unify(Node *ctx, Type *a, Type *b);
+Type *unify(Node *ctx, Type *a, Type *b);
 static Type *tyfix(Node *ctx, Type *orig, int noerr);
 static void typesub(Node *n, int noerr);
 
@@ -1170,7 +1170,7 @@ hasargs(Type *t)
 }
 
 /* Unifies two types, or errors if the types are not unifiable. */
-static Type *
+Type *
 unify(Node *ctx, Type *u, Type *v)
 {
 	Type *t, *r;
@@ -1266,9 +1266,14 @@ unify(Node *ctx, Type *u, Type *v)
 		unify(ctx, htget(delayed, a), tybase(b));
 	}
 
-	if (a->type == Tyvar || tyeq(a, b)) {
-		tytab[a->tid] = b;
+	/* Record the equivalence relation.
+	 * Make higher tid points to lower tid */
+	if (a->tid > b->tid) {
+		t = a;
+		a = b;
+		b = t;
 	}
+	tyeqv[b->tid] = a;
 
 	return r;
 }
@@ -3073,4 +3078,14 @@ infer(void)
 
 	specialize();
 	verify();
+}
+
+Type *
+tyeqvcls(Type *t)
+{
+	if (!t)
+		return t;
+	while (tyeqv[t->tid])
+		t = tyeqv[t->tid];
+	return t;
 }
