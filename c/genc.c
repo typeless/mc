@@ -1952,7 +1952,6 @@ sort_decls_rec(
 			default:
 				;
 			}
-			sort_types_rec(utypes, nutypes, n->expr.type, tyvisited);
 			break;
 		default:
 			for (i = 0; i < n->expr.nargs; i++)
@@ -2002,6 +2001,7 @@ sort_decls_rec(
 		switch (n->lit.littype) {
 		case Lfunc:
 			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->lit.fnval, visited, tyvisited, count);
+			sort_types_rec(utypes, nutypes, n->lit.type, tyvisited);
 			break;
 		default:
 			;
@@ -2010,6 +2010,7 @@ sort_decls_rec(
 	case Nfunc:
 		pushstab(n->func.scope);
 		sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->func.body, visited, tyvisited, count);
+		sort_types_rec(utypes, nutypes, n->func.type, tyvisited);
 		popstab();
 		break;
 	case Nblock:
