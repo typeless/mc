@@ -1851,7 +1851,7 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 	Type *u;
 	size_t i;
 
-	t = tyeqvcls(t);
+	//t = tysearch(tyeqvcls(t));
 
 	if (bshas(visited, t->tid))
 		return;
@@ -1970,10 +1970,10 @@ sort_decls_rec(
 			die("cyclic decls");
 		bsput(mark, n->decl.did);
 
-		sort_types_rec(utypes, nutypes, n->decl.type, tyvisited);
 		if (n->decl.init) {
 			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->decl.init, visited, tyvisited, count);
 		}
+		sort_types_rec(utypes, nutypes, n->decl.type, tyvisited);
 		bsdel(mark, n->decl.did);
 
 		if (hthas(count, n))
