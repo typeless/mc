@@ -1035,7 +1035,6 @@ emit_match(FILE *fd, Node *n)
 
 	// emit_type(fd, exprtype(val));
 	fprintf(fd, "%s _v%d = ", __ty(exprtype(val)), val->nid);
-	// fprintf(fd, "_Ty%d _v%d = ", exprtype(val)->tid, val->nid);
 	emit_expr(fd, val);
 	fprintf(fd, ";");
 	fprintf(fd, "\n\n");
@@ -1902,7 +1901,7 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 	case Typaram:
 	case Tyvar:
 	default:
-		fprintf(stderr, "/* Invalid type: %s id: %d */", tystr(t), t->tid);
+		fprintf(stderr, "/* Invalid type: %s(%s) id: %d */", tystr(t), tytystr(t), t->tid);
 		assert(0);
 	}
 	lappend(utypes, nutypes, t);
@@ -1956,8 +1955,10 @@ sort_decls_rec(
 			break;
 		default:
 			for (i = 0; i < n->expr.nargs; i++)
-				if (n->expr.args[i]->type == Nexpr)
+				if (n->expr.args[i]->type == Nexpr) {
 					sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->expr.args[i], visited, tyvisited, count);
+					sort_types_rec(utypes, nutypes, n->expr.args[i]->expr.type, tyvisited);
+				}
 		}
 		break;
 	case Ndecl:
