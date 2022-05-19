@@ -575,7 +575,7 @@ specializedcl(Node *gnode, Type *param, Type *to, Node **name)
 	fillsubst(tsmap, to, g->decl.type);
 
 	t = tysubst(g->decl.type, tsmap);
-	//unify(n, t, to);
+	unify(n, t, to);
 	d = mkdecl(g->loc, n, t);
 	d->decl.isconst = g->decl.isconst;
 	d->decl.isextern = g->decl.isextern;

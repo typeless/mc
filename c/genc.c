@@ -528,7 +528,7 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Oarr:
 		fprintf(fd, "(");
-		fprintf(fd, "(const %s)", __ty(tysearch(exprtype(n))));
+		fprintf(fd, "(const %s)", __ty(exprtype(n)));
 
 		fprintf(fd," {.elem = {");
 		for (i = 0; i < n->expr.nargs; i++) {
@@ -542,7 +542,7 @@ emit_expr(FILE *fd, Node *n)
 	case Otup:
 	case Ostruct:
 		fprintf(fd, "(");
-		fprintf(fd, "(const %s)", __ty(tysearch(exprtype(n))));
+		fprintf(fd, "(const %s)", __ty(exprtype(n)));
 
 		fprintf(fd," {");
 		for (i = 0; i < n->expr.nargs; i++) {
@@ -556,7 +556,7 @@ emit_expr(FILE *fd, Node *n)
 	case Oucon:
 		uc = finducon(tybase(exprtype(n)), n->expr.args[0]);
 		fprintf(fd, "(");
-		fprintf(fd, "(const %s)", __ty(tysearch(exprtype(n))));
+		fprintf(fd, "(const %s)", __ty(exprtype(n)));
 		fprintf(fd," {");
 		fprintf(fd, "._utag = %ld,", uc->id);
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
@@ -968,7 +968,7 @@ emit_objdecl(FILE *fd, Node *n)
 		fprintf(fd, "const ");
 	}
 
-	fprintf(fd, "%s ", __ty(tysearch(decltype(n))));
+	fprintf(fd, "%s ", __ty(decltype(n)));
 	if (n->decl.isextern) {
 		snprintf(name, sizeof(name), "%s", asmname(n));
 	} else if(n->decl.isglobl) {
@@ -1479,13 +1479,13 @@ emit_forward_decl_rec(FILE *fd, Type *t, Bitset *visited)
 		return;
 	}
 
-	t = tysearch(t);
+	assert(t->type != Tyvar);
 	switch (t->type) {
 	case Typtr:
 		if (t->sub) {
-			tn = tysearch(t->sub[0]);
+			tn = t->sub[0];
 			if (tn->type == Tyname) {
-				ts = tysearch(tn->sub[0]);
+				ts = tn->sub[0];
 				if (ts->type == Tystruct) {
 					fprintf(fd, "struct %s;\n", __ty(ts));
 					fprintf(fd, "typedef struct %s %s;/*ty=%s -> %s*/\n", __ty(ts), __ty(ts), tytystr(ts), tytystr(ts));
@@ -1505,17 +1505,6 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 {
 	size_t i;
 	int hasns;
-
-	if (!t) {
-		return;
-	}
-	t = tysearch(t);
-
-	if (bshas(visited, t->tid)) {
-		return;
-	}
-	bsput(visited, t->tid);
-	fprintf(fd, "/* tid: %d visited:%d type: %s %s */\n", t->tid, bshas(visited, t->tid), tytystr(t), tystr(t));
 
 	switch (t->type) {
 	case Tyvoid:
@@ -1570,14 +1559,11 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "typedef __builtin_va_list %s; /* Tyvalist */", __ty(t));
 		break;
 	case Typtr:
-		emit_typedef_rec(fd, t->sub[0], visited);
 		fprintf(fd, "typedef ");
 		fprintf(fd, "%s * %s;", __ty(t->sub[0]), __ty(t));
 		fprintf(fd, "/* %s -> %s*/", tytystr(t->sub[0]), tytystr(tybase(t->sub[0])));
 		break;
 	case Tyarray:
-		emit_typedef_rec(fd, t->sub[0], visited);
-
 		fprintf(fd, "typedef struct {");
 		fprintf(fd, "%s ", __ty(t->sub[0]));
 		if (t->asize) {
@@ -1588,9 +1574,6 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "} %s;", __ty(t));
 		break;
 	case Tytuple:
-		for (i = 0; i < t->nsub; i++) {
-			emit_typedef_rec(fd, t->sub[i], visited);
-		}
 		fprintf(fd, "typedef struct {");
 		for (i = 0; i < t->nsub; i++) {
 			fprintf(fd, "%s _%ld;", __ty(t->sub[i]), i);
@@ -1601,9 +1584,6 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		// fprintf(fd, " %s;\n", __ty(t));
 		break;
 	case Tystruct:
-		for (i = 0; i < t->nmemb; i++) {
-			emit_typedef_rec(fd, decltype(t->sdecls[i]), visited);
-		}
 		//fprintf(fd, "typedef struct {");
 		fprintf(fd, "struct %s {", __ty(t));
 		for (i = 0; i < t->nmemb; i++) {
@@ -1615,9 +1595,6 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "typedef struct %s %s;\n", __ty(t), __ty(t));
 		break;
 	case Tyunion:
-		for (i = 0; i < t->nmemb; i++) {
-			emit_typedef_rec(fd, t->udecls[i]->etype, visited);
-		}
 		fprintf(fd, "typedef struct {");
 		fprintf(fd, "uintptr_t _utag;");
 		fprintf(fd, "union {");
@@ -1635,25 +1612,18 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "} %s;", __ty(t));
 		break;
 	case Tyslice:
-		emit_typedef_rec(fd, t->sub[0], visited);
-
 		fprintf(fd, "typedef ");
 		// emit_type(fd, t);
 		fprintf(fd, "struct { %s *p; size_t len; }", __ty(t->sub[0]));
 		fprintf(fd, " %s;", __ty(t));
 		break;
 	case Tyfunc:
-		for (i = 0; i < t->nsub; i++) {
-			emit_typedef_rec(fd, t->sub[i], visited);
-		}
 		fprintf(fd, "typedef ");
 		emit_type(fd, t);
 		fprintf(fd, " %s; /* Tyfunc */", __ty(t));
 		break;
 	case Tyname:
 	case Tygeneric:
-		emit_typedef_rec(fd, t->sub[0], visited);
-
 		hasns = t->name->name.ns != NULL;
 		fprintf(fd, "typedef ");
 		// emit_type(fd, t->sub[0]);
@@ -1667,7 +1637,6 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		break;
 	case Tyvar:
 		fprintf(fd, "/* Tyvar %d*/", t->tid);
-		emit_typedef_rec(fd, tytab[t->tid], visited);
 		break;
 	default:
 		fprintf(stderr, "/* Invalid type: %s id: %d */", tystr(t), t->tid);
@@ -1677,13 +1646,13 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 }
 
 static void
-emit_typedefs(FILE *fd)
+emit_typedefs(FILE *fd, Type **utypes, size_t nutypes)
 {
 	Type *t;
 	Bitset *visited;
 	size_t i;
 
-	fprintf(fd, "/* Ntypes: %d */\n", Ntypes);
+	fprintf(fd, "/* Nutypes: %ld */\n", nutypes);
 #if 0
 	for (i = 0; i < ntypes; i++) {
 		Type *u;
@@ -1696,26 +1665,15 @@ emit_typedefs(FILE *fd)
 	visited = mkbs();
 
 	fprintf(fd, "/* START OF FORWARD DECLARATIONS */\n");
-	for (i = 0; i < ntypes; i++) {
-		t = types[i];
+	for (i = 0; i < nutypes; i++) {
+		t = utypes[i];
 		emit_forward_decl_rec(fd, t, visited);
 	}
 	fprintf(fd, "/* END OF FORWARD DECLARATIONS */\n");
 
 	bsclear(visited);
-	for (i = 0; i < ntypes; i++) {
-		t = tysearch(types[i]);
-		if (!t->resolved) {
-			continue;
-		}
-		if (t->type == Tyvalist) {
-			continue;
-		}
-
-		/* Non-termainl types */
-		if (bshas(visited, t->tid)) {
-			continue;
-		}
+	for (i = 0; i < nutypes; i++) {
+		t = utypes[i];
 		emit_typedef_rec(fd, t, visited);
 	}
 	bsfree(visited);
@@ -1893,6 +1851,8 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 {
 	Type *u;
 	size_t i;
+
+	t = tyeqvcls(t);
 
 	if (bshas(visited, t->tid))
 		return;
@@ -2083,7 +2043,7 @@ sort_decls_rec(
 	free(mark);
 }
 
-__USED static void
+static void
 sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Type ***utypes, size_t *nutypes, Node **decls, size_t n)
 {
 	Bitset *visited;
@@ -2137,6 +2097,9 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	sort_decls(&k, &nk, &imports, &nimports, &utypes, &nutypes, unsorted, nglobls);
 	for (i = 0; i < nk; i++)
 		fprintf(fd, "/* sorted(%ld): %s did:%ld */\n", i, declname(k[i]), k[i]->decl.did);
+
+
+	emit_typedefs(fd, utypes, nutypes);
 
 	fprintf(fd, "/* START OF IMPORTS */\n");
 	/* imports */
@@ -2426,7 +2389,6 @@ genc(FILE *hd, FILE *fd)
 		fprintf(fd, "/* Filename: %s */\n", file.files[i]);
 	}
 	emit_includes(fd);
-	emit_typedefs(fd);
 
 	/* Output all struct defining func env */
 	for (i = 0; i < nfnvals; i++) {
