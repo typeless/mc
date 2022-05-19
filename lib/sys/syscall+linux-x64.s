@@ -9,19 +9,19 @@ sys$syscall:
 	 */
 	movq %rdi,%rax
         /* 8(%rsp): hidden type arg */
-	//movq 16(%rsp),%rdi
-	//movq 24(%rsp),%rsi
-	//movq 32(%rsp),%rdx
-	//movq 40(%rsp),%r10
-	//movq 48(%rsp),%r8
-	//movq 56(%rsp),%r9
+	movq 16(%rsp),%rdi
+	movq 24(%rsp),%rsi
+	movq 32(%rsp),%rdx
+	movq 40(%rsp),%r10
+	movq 48(%rsp),%r8
+	movq 56(%rsp),%r9
 
-	movq %rsi,%rdi
-	movq %rdx,%rsi
-	movq %rcx,%rdx
-	movq %r8,%r10
-	movq %r9,%r8
-	movq (%rsp),%r9
+	//movq %rsi,%rdi
+	//movq %rdx,%rsi
+	//movq %rcx,%rdx
+	//movq %r8,%r10
+	//movq %r9,%r8
+	//movq (%rsp),%r9
 
 	syscall
 
