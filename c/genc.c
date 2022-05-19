@@ -1309,7 +1309,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	Node **args, **env;
 	size_t nargs, nenv;
 
-	t = decltype(n);
+	t = tyeqvcls(decltype(n));
 
 	assert(n->type == Ndecl);
 	assert(t->type == Tyfunc || t->type == Tycode);
@@ -1431,7 +1431,7 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 		}
 	}
 
-	fprintf(fd, "%s\n", __ty(t->sub[0]));
+	fprintf(fd, "%s ", __ty(t->sub[0]));
 
 	if (dcl)
 		fprintf(fd, "%s(", asmname(dcl));
@@ -1851,7 +1851,7 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 	Type *u;
 	size_t i;
 
-	//t = tysearch(tyeqvcls(t));
+	t = tyeqvcls(t);
 
 	if (bshas(visited, t->tid))
 		return;

@@ -1273,7 +1273,8 @@ unify(Node *ctx, Type *u, Type *v)
 		a = b;
 		b = t;
 	}
-	tyeqv[b->tid] = a;
+	if (a->type != Tyvar && tyeq(a, b))
+		tyeqv[b->tid] = a;
 
 	return r;
 }
@@ -3087,5 +3088,5 @@ tyeqvcls(Type *t)
 		return t;
 	while (tyeqv[t->tid])
 		t = tyeqv[t->tid];
-	return t;
+	return tysearch(t);
 }
