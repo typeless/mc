@@ -565,7 +565,7 @@ emit_expr(FILE *fd, Node *n)
 			Type *etype = uc->etype;
 			if (etype) {
 				if (exprtype(n->expr.args[1])->type != Tyvoid) {
-					fprintf(fd, "._udata = { .%s%s%s =", ns ? ns : "", ns ? "$" : "", name);
+					fprintf(fd, "._udata = { ._%s%s%s = ", ns ? ns : "", ns ? "$" : "", name);
 					switch (tybase(exprtype(n->expr.args[1]))->type) {
 						case Tyarray:
 						case Tyslice:
@@ -1607,7 +1607,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 			char *name = t->udecls[i]->name->name.name;
 			Type *etype = t->udecls[i]->etype;
 			if (etype && tybase(etype)->type != Tyvoid) {
-				fprintf(fd, "%s %s%s%s;", __ty(t->udecls[i]->etype), ns ? ns : "", ns ? "$" : "", name);
+				fprintf(fd, "%s _%s%s%s;", __ty(t->udecls[i]->etype), ns ? ns : "", ns ? "$" : "", name);
 			} else {
 				fprintf(fd, "/* no etype */");
 			}
