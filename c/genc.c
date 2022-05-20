@@ -890,10 +890,10 @@ emit_expr(FILE *fd, Node *n)
 			Type *uty, *ety;
 			Ucon *uc;
 			ety = exprtype(n);
-			uty = exprtype(n->expr.args[0]);
+			uty = tybase(exprtype(n->expr.args[0]));
 			for (i = 0; i < uty->nmemb; i++) {
 				uc = uty->udecls[i];
-				if (uc->etype->tid == ety->tid)
+				if (uc->etype && uc->etype->tid == ety->tid)
 					break;
 			}
 			assert(uc != NULL);
