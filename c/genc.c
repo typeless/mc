@@ -1560,7 +1560,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "typedef double %s; /* Tyflt64 */", __ty(t));
 		break;
 	case Tyvalist:
-		fprintf(fd, "typedef __builtin_va_list %s; /* Tyvalist */", __ty(t));
+		fprintf(fd, "typedef void *%s; /* Tyvalist */", __ty(t));
 		break;
 	case Typtr:
 		fprintf(fd, "typedef ");
