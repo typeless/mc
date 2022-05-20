@@ -517,7 +517,7 @@ emit_expr(FILE *fd, Node *n)
 			fprintf(fd, "}\n");
 			break;
 		case Llbl:
-			assert(0);
+			fprintf(fd, "L%s:", lblstr(n));
 			break;
 		case Lvoid:
 			assert(0);
@@ -869,10 +869,11 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Oret:
 		fprintf(fd, "return ");
-		emit_expr(fd, n->expr.args[0]);
+		if (exprtype(n->expr.args[0])->type != Tyvoid)
+			emit_expr(fd, n->expr.args[0]);
 		break;
 	case Ojmp:
-		assert(0);
+		fprintf(fd, "goto %s", lblstr(n->expr.args[0]));
 		break;
 	case Obreak:
 		assert(0);
