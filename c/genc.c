@@ -2135,8 +2135,6 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	/* externs */
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (!decltype(n)->resolved)
-			continue;
 		if (n->decl.isimport)
 			continue;
 		if (!n->decl.isextern)
@@ -2151,11 +2149,6 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		fprintf(fd, "/*XXX %s did:%ld resolved:%d isextern:%d isimport:%d isglobl:%d vis:%d */\n", asmname(n), n->decl.did, decltype(n)->resolved, n->decl.isextern, n->decl.isimport, n->decl.isglobl, n->decl.vis);
-		//if (decltype(n)->type != Tyfunc && !n->decl.isextern)
-		//	continue;
-		if (!decltype(n)->resolved)
-			continue;
 		switch (decltype(n)->type) {
 		case Tyfunc:
 			genfuncdecl(fd, n, NULL);
@@ -2421,6 +2414,12 @@ genc(FILE *hd, FILE *fd)
 		emit_objdecl(fd, n);
 	}
 	fprintf(fd, "/* END OF GLOBAL OBJECT DECLARATIONS */\n");
+
+	/* Output all struct defining func env */
+	for (i = 0; i < nfnvals; i++) {
+		assert(fnvals[i]->type == Nfunc);
+		emit_fnenvty(fd, fnvals[i]);
+	}
 
 	/* Output all function definitions */
 	for (i = 0; i < nfnvals; i++) {
