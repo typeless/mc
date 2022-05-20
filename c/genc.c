@@ -575,7 +575,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "(");
 		fprintf(fd, "(const %s)", __ty(exprtype(n)));
 		fprintf(fd," {");
-		fprintf(fd, "._utag = %ld,", uc->id);
+		fprintf(fd, "._utag = %s,", __utagcname(uc));
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
 			Type *etype = uc->etype;
 			if (etype) {
@@ -1358,9 +1358,6 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	if (n->decl.isextern || n->decl.isimport) {
 		fprintf(fd, "extern ");
 	}
-	if (n->decl.vis == Vishidden) {
-		fprintf(fd, "__attribute__((visibility(\"hidden\"))) ");
-	}
 	if (!n->decl.isextern && !n->decl.isimport && n->decl.isglobl) {
 		if (n->decl.vis == Visintern) {
 			if (!streq(declname(n), "__init__") && !streq(declname(n), "__fini__") && !streq(declname(n), "main")) {
@@ -1396,6 +1393,16 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	}
 
 	fprintf(fd, ")");
+
+	if (n->decl.vis == Vishidden || n->decl.isnoret) {
+		fprintf(fd, " __attribute__((");
+		if (n->decl.vis == Vishidden)
+			fprintf(fd, "visibility(\"hidden\"),");
+		if (n->decl.isnoret)
+			fprintf(fd, "noreturn,");
+		fprintf(fd,")) ");
+	}
+
 	if (init) {
 		fprintf(fd, "\n{\n");
 		emit_fnval(fd, init);
