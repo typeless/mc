@@ -358,6 +358,7 @@ emit_call(FILE *fd, Node *n)
 
 	nenv = 0;
 	nargs = 0;
+	fprintf(fd, "(");
 	if (n->expr.args[0]->expr.op == Olit) {
 		assert(n->expr.args[0]->type == Nexpr);
 		assert(n->expr.args[0]->expr.op == Olit);
@@ -373,6 +374,8 @@ emit_call(FILE *fd, Node *n)
 		nargs = n->expr.nargs;
 		fprintf(fd, "%s", asmname(dcl));
 	}
+	fprintf(fd, ")");
+
 	fprintf(fd, "(");
 	if (nenv > 0) {
 		fprintf(fd, "%s &(struct _envty$%d){", nargs > 0 ? "," : "", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
@@ -938,7 +941,16 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, ")).");
 		fprintf(fd, "_%llu)", n->expr.args[1]->expr.args[0]->lit.intval);
 		break;
-	default:;
+	case Otern:
+		fprintf(fd, "(");
+		emit_expr(fd, n->expr.args[0]);
+		fprintf(fd, " ? ");
+		emit_expr(fd, n->expr.args[1]);
+		fprintf(fd, " : ");
+		emit_expr(fd, n->expr.args[2]);
+		fprintf(fd, ")");
+		break;
+	default:
 		fprintf(stderr, "op: %s\n", opstr[exprop(n)]);
 		assert(0);
 	}
