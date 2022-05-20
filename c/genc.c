@@ -2384,9 +2384,11 @@ genc(FILE *hd, FILE *fd)
 
 	/* Translate valist arguments to tuple types */
 	for (i = 0; i < nfncalls; i++) {
+		Node *dcl;
 		Type *ft;
 		Node *n, **args;
-		size_t nargs, j;
+		Type **sub;
+		size_t nargs, nsub, j;
 		int notsyscall;
 
 		n = fncalls[i];
@@ -2395,23 +2397,34 @@ genc(FILE *hd, FILE *fd)
 
 		notsyscall = 1;
 		if (exprop(n->expr.args[0]) == Ovar) {
-			Node *dcl = decls[n->expr.args[0]->expr.did];
+			dcl = decls[n->expr.args[0]->expr.did];
 			notsyscall = !streq(asmname(dcl), "sys$syscall");
 		}
 
 		ft = exprtype(n->expr.args[0]);
 		args = NULL;
 		nargs = 0;
+		sub = NULL;
+		nsub = 0;
+
+		//lappend(&sub, &nsub, ft->sub[0]);
 		for (j = 0; j < n->expr.nargs; j++) {
 			if (notsyscall && j < ft->nsub && tybase(ft->sub[j])->type == Tyvalist)
 				lappend(&args, &nargs, vatypeinfo(n));
 			if (tybase(exprtype(n->expr.args[j]))->type == Tyvoid)
 				continue;
 			lappend(&args, &nargs, n->expr.args[j]);
+			lappend(&sub, &nsub, exprtype(n->expr.args[j]));
 		}
 		free(n->expr.args);
 		n->expr.args = args;
 		n->expr.nargs = nargs;
+
+		//free(ft->sub);
+		//ft->sub = sub;
+		//ft->nsub = nsub;
+		//free(dcl->decl.type);
+		//dcl->decl.type = tydup(ft);
 	}
 
 	/* Start to output C code */
