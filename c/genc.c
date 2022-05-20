@@ -1612,8 +1612,13 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "typedef struct %s %s;\n", __ty(t), __ty(t));
 		break;
 	case Tyunion:
-		fprintf(fd, "typedef struct {");
-		fprintf(fd, "uintptr_t _utag;");
+		fprintf(fd, "typedef struct {\n");
+		fprintf(fd, "enum {");
+		for( i = 0; i < t->nmemb; i++) {
+			Ucon *uc = t->udecls[i];
+			fprintf(fd, "%s = %ld,\n", __utagcname(uc), i);
+		}
+		fprintf(fd, "} _utag;\n");
 		fprintf(fd, "union {");
 		for (i = 0; i < t->nmemb; i++) {
 			Ucon *uc = t->udecls[i];
