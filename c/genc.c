@@ -40,14 +40,15 @@ __ty(Type *t)
 static char *
 __utagcname(Ucon *uc)
 {
-	char *ns;
-	char *name;
+	//char *ns;
+	//char *name;
 	char buf[128];
 
-	ns = uc->name->name.ns;
-	name = uc->name->name.name;
+	//ns = uc->name->name.ns;
+	//name = uc->name->name.name;
 
-	snprintf(buf, sizeof(buf), "_%s%s%s", ns ? ns : "", ns ? "$" : "", name);
+	//snprintf(buf, sizeof(buf), "_%s%s%s", ns ? ns : "", ns ? "$" : "", name);
+	snprintf(buf, sizeof(buf), "_Ty%d_tag%ld", uc->utype->tid, uc->id);
 	return strdup(buf);
 }
 
@@ -1613,23 +1614,23 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		break;
 	case Tyunion:
 		fprintf(fd, "typedef struct {\n");
-		fprintf(fd, "enum {");
+		fprintf(fd, "enum {\n");
 		for( i = 0; i < t->nmemb; i++) {
 			Ucon *uc = t->udecls[i];
 			fprintf(fd, "%s = %ld,\n", __utagcname(uc), i);
 		}
 		fprintf(fd, "} _utag;\n");
-		fprintf(fd, "union {");
+		fprintf(fd, "union {\n");
 		for (i = 0; i < t->nmemb; i++) {
 			Ucon *uc = t->udecls[i];
 			Type *etype = t->udecls[i]->etype;
 			if (etype && tybase(etype)->type != Tyvoid) {
-				fprintf(fd, "%s %s;", __ty(t->udecls[i]->etype), __utagcname(uc));
+				fprintf(fd, "%s %s;\n", __ty(t->udecls[i]->etype), __utagcname(uc));
 			} else {
 				fprintf(fd, "/* no etype */");
 			}
 		}
-		fprintf(fd, "} _udata;");
+		fprintf(fd, "} _udata;\n");
 		fprintf(fd, "} %s;", __ty(t));
 		break;
 	case Tyslice:
