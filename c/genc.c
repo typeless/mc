@@ -2151,11 +2151,9 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		n = imports[i];
 		assert(n->decl.isimport);
 
-		switch (decltype(n)->type) {
-		case Tyfunc:
+		if (isconstfn(n)) {
 			genfuncdecl(fd, n, NULL);
-			break;
-		default:
+		} else {
 			fprintf(fd, "/* #%ld did:%ld*/\n", i, n->decl.did);
 			n = fold(n, 1);
 			emit_objdecl(fd, n);
@@ -2170,23 +2168,15 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 			continue;
 		if (!n->decl.isextern)
 			continue;
-		switch (decltype(n)->type) {
-		case Tyfunc:
+		if (isconstfn(n))
 			continue;
-		default:
-			emit_objdecl(fd, n);
-		}
+		emit_objdecl(fd, n);
 	}
 
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		switch (decltype(n)->type) {
-		case Tyfunc:
+		if (isconstfn(n))
 			genfuncdecl(fd, n, NULL);
-			break;
-		default:
-			;
-		}
 	}
 	fprintf(fd, "/* END OF EXTERNS */\n");
 
