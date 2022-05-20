@@ -37,6 +37,20 @@ __ty(Type *t)
 	return strdup(buf);
 }
 
+static char *
+__utagcname(Ucon *uc)
+{
+	char *ns;
+	char *name;
+	char buf[128];
+
+	ns = uc->name->name.ns;
+	name = uc->name->name.name;
+
+	snprintf(buf, sizeof(buf), "%s%s%s", ns ? ns : "", ns ? "$" : "", name);
+	return strdup(buf);
+}
+
 __USED static char *
 tytystr(Type *t)
 {
@@ -563,12 +577,10 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd," {");
 		fprintf(fd, "._utag = %ld,", uc->id);
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
-			char *ns = uc->name->name.ns;
-			char *name = uc->name->name.name;
 			Type *etype = uc->etype;
 			if (etype) {
 				if (exprtype(n->expr.args[1])->type != Tyvoid) {
-					fprintf(fd, "._udata = { ._%s%s%s = ", ns ? ns : "", ns ? "$" : "", name);
+					fprintf(fd, "._udata = { ._%s = ", __utagcname(uc));
 					emit_expr(fd, n->expr.args[1]);
 					fprintf(fd, "}");
 				}
