@@ -48,7 +48,7 @@ __utagcname(Ucon *uc)
 	//name = uc->name->name.name;
 
 	//snprintf(buf, sizeof(buf), "_%s%s%s", ns ? ns : "", ns ? "$" : "", name);
-	snprintf(buf, sizeof(buf), "_Ty%d_tag%ld", uc->utype->tid, uc->id);
+	snprintf(buf, sizeof(buf), "_Ty%d_tag%ld", tydedup(uc->utype)->tid, uc->id);
 	return strdup(buf);
 }
 
