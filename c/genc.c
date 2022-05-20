@@ -840,9 +840,16 @@ emit_expr(FILE *fd, Node *n)
 		emit_expr(fd, args[1]);
 		break;
 	case Oidx:
-		if (exprtype(n->expr.args[0])->type == Tyslice) {
-			emit_expr(fd, n->expr.args[0]);
+		emit_expr(fd, n->expr.args[0]);
+		switch  (exprtype(n->expr.args[0])->type) {
+		case Tyslice:
 			fprintf(fd, ".p");
+			break;
+		case Tyarray:
+			fprintf(fd, ".elem");
+			break;
+		default:
+			assert(0);
 		}
 		fprintf(fd, "[");
 		emit_expr(fd, n->expr.args[1]);
