@@ -317,6 +317,7 @@ emit_type(FILE *fd, Type *t)
 		fprintf(fd, "*p; size_t len /* size_t */; }");
 		break;
 	case Tyfunc:
+		fprintf(fd, "struct {\n");
 		fprintf(fd, "typeof(");
 		fprintf(fd, "%s ", __ty(t->sub[0]));
 		// emit_type(fd, t->sub[0]);
@@ -337,7 +338,9 @@ emit_type(FILE *fd, Type *t)
 			fprintf(fd, "void");
 		}
 		fprintf(fd, ")");
-		fprintf(fd, ")");
+		fprintf(fd, ") _func;\n");
+		fprintf(fd, "void * _data;\n");
+		fprintf(fd, "}");
 		break;
 	case Tyname:
 	case Tygeneric:
@@ -528,8 +531,8 @@ emit_expr(FILE *fd, Node *n)
 			fprintf(fd, "\", %ld}", args[0]->lit.strval.len);
 			break;
 		case Lfunc:
-			fprintf(fd, "(const uintptr_t[2]){");
-			fprintf(fd, "(uintptr_t)_fn%d,", args[0]->lit.fnval->nid);
+			fprintf(fd, "(const %s){", __ty(args[0]->lit.type));
+			fprintf(fd, "_fn%d,", args[0]->lit.fnval->nid);
 			fprintf(fd, "0");
 			fprintf(fd, "}\n");
 			break;
