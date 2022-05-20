@@ -582,11 +582,23 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "(const %s)", __ty(exprtype(n)));
 
 		fprintf(fd," {");
-		for (i = 0; i < n->expr.nargs; i++) {
-			emit_expr(fd, n->expr.args[i]);
-			if (i + 1 < n->expr.nargs) {
-				fprintf(fd, ", ");
+
+		for (size_t i = 0; i < n->expr.nargs; i++) {
+			Type *t = tybase(exprtype(n));
+			Node *memb = n->expr.args[i];
+			Node *name = NULL;
+			for (j = 0; j < t->nmemb; j++) {
+				name = t->sdecls[j]->decl.name;
+				if (nameeq(memb->expr.idx, name))
+					break;
+
 			}
+			if (!name)
+				continue;
+
+			fprintf(fd, ".%s = ", namestr(name));
+			emit_expr(fd, n->expr.args[i]);
+			fprintf(fd, ", ");
 		}
 		fprintf(fd, "})");
 		break;
