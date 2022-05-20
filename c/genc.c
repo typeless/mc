@@ -1616,11 +1616,10 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, "uintptr_t _utag;");
 		fprintf(fd, "union {");
 		for (i = 0; i < t->nmemb; i++) {
-			char *ns = t->udecls[i]->name->name.ns;
-			char *name = t->udecls[i]->name->name.name;
+			Ucon *uc = t->udecls[i];
 			Type *etype = t->udecls[i]->etype;
 			if (etype && tybase(etype)->type != Tyvoid) {
-				fprintf(fd, "%s _%s%s%s;", __ty(t->udecls[i]->etype), ns ? ns : "", ns ? "$" : "", name);
+				fprintf(fd, "%s %s;", __ty(t->udecls[i]->etype), __utagcname(uc));
 			} else {
 				fprintf(fd, "/* no etype */");
 			}
