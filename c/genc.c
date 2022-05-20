@@ -2020,6 +2020,7 @@ sort_decls_rec(
 		popstab();
 		break;
 	case Nmatchstmt:
+		sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->matchstmt.val, visited, tyvisited, count);
 		for (i = 0; i < n->matchstmt.nmatches; i++) {
 			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->matchstmt.matches[i], visited, tyvisited, count);
 		}
