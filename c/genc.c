@@ -47,7 +47,7 @@ __utagcname(Ucon *uc)
 	ns = uc->name->name.ns;
 	name = uc->name->name.name;
 
-	snprintf(buf, sizeof(buf), "%s%s%s", ns ? ns : "", ns ? "$" : "", name);
+	snprintf(buf, sizeof(buf), "_%s%s%s", ns ? ns : "", ns ? "$" : "", name);
 	return strdup(buf);
 }
 
@@ -302,10 +302,9 @@ emit_type(FILE *fd, Type *t)
 		fprintf(fd, "uintptr_t _tag;");
 		fprintf(fd, "union {");
 		for (i = 0; i < t->nmemb; i++) {
-			char *ns = t->udecls[i]->name->name.ns;
-			char *name = t->udecls[i]->name->name.name;
-			fprintf(fd, "struct %s%s%s {", ns ? ns : "", ns ? "$" : "", name);
-			emit_type(fd, t->udecls[i]->etype);
+			Ucon *uc = t->udecls[i];
+			fprintf(fd, "struct %s {", __utagcname(uc));
+			emit_type(fd, uc->etype);
 			fprintf(fd, "; };");
 		}
 		fprintf(fd, "}");
@@ -534,7 +533,7 @@ emit_expr(FILE *fd, Node *n)
 			fprintf(fd, "}\n");
 			break;
 		case Llbl:
-			fprintf(fd, "L%s:", lblstr(n));
+			fprintf(fd, "_%s:", lblstr(n) + 1);
 			break;
 		case Lvoid:
 			assert(0);
@@ -580,7 +579,7 @@ emit_expr(FILE *fd, Node *n)
 			Type *etype = uc->etype;
 			if (etype) {
 				if (exprtype(n->expr.args[1])->type != Tyvoid) {
-					fprintf(fd, "._udata = { ._%s = ", __utagcname(uc));
+					fprintf(fd, "._udata = { .%s = ", __utagcname(uc));
 					emit_expr(fd, n->expr.args[1]);
 					fprintf(fd, "}");
 				}
@@ -913,7 +912,7 @@ emit_expr(FILE *fd, Node *n)
 					break;
 			}
 			assert(uc != NULL);
-			fprintf(fd, "._udata.%s /* %s */", namestr(uc->name), tystr(exprtype(n)));
+			fprintf(fd, "._udata.%s /* %s */", __utagcname(uc), tystr(exprtype(n)));
 		}
 		break;
 	case Ovar:
