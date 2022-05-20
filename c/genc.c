@@ -566,18 +566,7 @@ emit_expr(FILE *fd, Node *n)
 			if (etype) {
 				if (exprtype(n->expr.args[1])->type != Tyvoid) {
 					fprintf(fd, "._udata = { ._%s%s%s = ", ns ? ns : "", ns ? "$" : "", name);
-					switch (tybase(exprtype(n->expr.args[1]))->type) {
-						case Tyarray:
-						case Tyslice:
-						case Tystruct:
-						case Tyunion:
-							fprintf(fd, "{");
-							emit_expr(fd, n->expr.args[1]);
-							fprintf(fd, "}");
-							break;
-						default:
-							emit_expr(fd, n->expr.args[1]);
-					}
+					emit_expr(fd, n->expr.args[1]);
 					fprintf(fd, "}");
 				}
 			}
