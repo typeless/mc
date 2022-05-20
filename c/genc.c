@@ -1838,7 +1838,7 @@ gentype(FILE *fd, Type *ty)
 	blob_id = 0;
 	fprintf(fd, "const struct _Tydesc%d {\n", ty->tid);
 	writeblob_struct(fd, b, &blob_id);
-	fprintf(fd, "} %s = {\n", tydescid(buf, sizeof buf, ty));
+	fprintf(fd, "} __attribute__((packed)) %s = {\n", tydescid(buf, sizeof buf, ty));
 	writeblob(fd, b);
 	fprintf(fd, "};\n");
 
