@@ -560,22 +560,27 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd," {");
 		fprintf(fd, "._utag = %ld,", uc->id);
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
-			fprintf(fd, "._udata = {");
-			if (exprtype(n->expr.args[1])->type != Tyvoid) {
-				switch (tybase(exprtype(n->expr.args[1]))->type) {
-				case Tyarray:
-				case Tyslice:
-				case Tystruct:
-				case Tyunion:
-					fprintf(fd, "{");
-					emit_expr(fd, n->expr.args[1]);
+			char *ns = uc->name->name.ns;
+			char *name = uc->name->name.name;
+			Type *etype = uc->etype;
+			if (etype) {
+				if (exprtype(n->expr.args[1])->type != Tyvoid) {
+					fprintf(fd, "._udata = { .%s%s%s =", ns ? ns : "", ns ? "$" : "", name);
+					switch (tybase(exprtype(n->expr.args[1]))->type) {
+						case Tyarray:
+						case Tyslice:
+						case Tystruct:
+						case Tyunion:
+							fprintf(fd, "{");
+							emit_expr(fd, n->expr.args[1]);
+							fprintf(fd, "}");
+							break;
+						default:
+							emit_expr(fd, n->expr.args[1]);
+					}
 					fprintf(fd, "}");
-					break;
-				default:
-					emit_expr(fd, n->expr.args[1]);
 				}
 			}
-			fprintf(fd, "},");
 		}
 		fprintf(fd, "})");
 		break;
