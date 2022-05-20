@@ -184,6 +184,18 @@ tydescid(char *buf, size_t bufsz, Type *ty)
 	return buf;
 }
 
+static Type *
+codetype(Type *ft)
+{
+	ft = tybase(ft);
+	if (ft->type == Tycode)
+		return ft;
+	assert(ft->type == Tyfunc);
+	ft = tydup(ft);
+	ft->type = Tycode;
+	return ft;
+}
+
 static void
 fillglobls(Stab *st, Htab *globls)
 {
@@ -195,8 +207,8 @@ fillglobls(Stab *st, Htab *globls)
 	k = htkeys(st->dcl, &nk);
 	for (i = 0; i < nk; i++) {
 		s = htget(st->dcl, k[i]);
-		//if (isconstfn(s))
-		//	s->decl.type = codetype(s->decl.type);
+		if (isconstfn(s))
+			s->decl.type = codetype(s->decl.type);
 		htput(globls, s, asmname(s));
 	}
 	free(k);
@@ -318,6 +330,7 @@ emit_type(FILE *fd, Type *t)
 		break;
 	case Tyfunc:
 		fprintf(fd, "struct {\n");
+	case Tycode:
 		fprintf(fd, "typeof(");
 		fprintf(fd, "%s ", __ty(t->sub[0]));
 		// emit_type(fd, t->sub[0]);
@@ -338,7 +351,11 @@ emit_type(FILE *fd, Type *t)
 			fprintf(fd, "void");
 		}
 		fprintf(fd, ")");
-		fprintf(fd, ") _func;\n");
+		fprintf(fd, ")");
+
+		if (t->type == Tycode)
+			break;
+		fprintf(fd, " _func;\n");
 		fprintf(fd, "void * _data;\n");
 		fprintf(fd, "}");
 		break;
@@ -473,7 +490,7 @@ emit_expr(FILE *fd, Node *n)
 	Node **args;
 	Node *dcl;
 	Ucon *uc;
-	size_t i;
+	size_t i, j;
 	char ch;
 
 	assert(n->type == Nexpr);
@@ -1650,6 +1667,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		fprintf(fd, " %s;", __ty(t));
 		break;
 	case Tyfunc:
+	case Tycode:
 		fprintf(fd, "typedef ");
 		emit_type(fd, t);
 		fprintf(fd, " %s; /* Tyfunc */", __ty(t));
@@ -1914,6 +1932,7 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 	case Tyslice:
 	case Tytuple:
 	case Tyfunc:
+	case Tycode:
 	case Tyname:
 		for (i = 0; i < t->nsub; i++)
 			sort_types_rec(utypes, nutypes, t->sub[i], visited);
