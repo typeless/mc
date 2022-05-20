@@ -929,7 +929,7 @@ emit_expr(FILE *fd, Node *n)
 		} else if (dcl->decl.isimport) {
 			fprintf(fd, "%s" , asmname(dcl));
 		} else {
-			fprintf(fd, "_v%ld /* %s did:%ld op:%s nargs:%ld */", dcl->decl.did, declname(dcl), n->expr.did, opstr[exprop(n)], n->expr.nargs);
+			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
 		}
 		break;
 	case Otupget:
