@@ -2396,12 +2396,6 @@ genc(FILE *hd, FILE *fd)
 	}
 	emit_includes(fd);
 
-	/* Output all struct defining func env */
-	for (i = 0; i < nfnvals; i++) {
-		assert(fnvals[i]->type == Nfunc);
-		emit_fnenvty(fd, fnvals[i]);
-	}
-
 	emit_prototypes(fd, globls, refcnts);
 
 	/* Output type descriptors */
