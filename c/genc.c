@@ -2207,10 +2207,13 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		emit_objdecl(fd, n);
 	}
 
+	/* non-externs */
 	for (i = 0; i < nk; i++) {
 		n = k[i];
 		if (isconstfn(n))
 			genfuncdecl(fd, n, NULL);
+		else
+			emit_objdecl(fd, n);
 	}
 	fprintf(fd, "/* END OF EXTERNS */\n");
 
@@ -2468,14 +2471,6 @@ genc(FILE *hd, FILE *fd)
 
 	/* Output type descriptors */
 	gentypes(fd);
-
-	fprintf(fd, "/* START OF GLOBAL OBJECT DECLARATIONS */\n");
-	for (i = 0; i < nobjdecls; i++) {
-		Node *n;
-		n = fold(objdecls[i], 1);
-		emit_objdecl(fd, n);
-	}
-	fprintf(fd, "/* END OF GLOBAL OBJECT DECLARATIONS */\n");
 
 	/* Output all struct defining func env */
 	for (i = 0; i < nfnvals; i++) {
