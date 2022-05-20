@@ -888,7 +888,7 @@ emit_expr(FILE *fd, Node *n)
 			emit_expr(fd, n->expr.args[0]);
 		break;
 	case Ojmp:
-		fprintf(fd, "goto %s", lblstr(n->expr.args[0]));
+		fprintf(fd, "goto _%s", lblstr(n->expr.args[0]) + 1);
 		break;
 	case Obreak:
 		assert(0);
