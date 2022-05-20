@@ -512,7 +512,7 @@ emit_expr(FILE *fd, Node *n)
 			break;
 		case Lfunc:
 			fprintf(fd, "(const uintptr_t[2]){");
-			fprintf(fd, "_fn%d,", args[0]->lit.fnval->nid);
+			fprintf(fd, "(uintptr_t)_fn%d,", args[0]->lit.fnval->nid);
 			fprintf(fd, "0");
 			fprintf(fd, "}\n");
 			break;
