@@ -930,10 +930,10 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "goto _%s", lblstr(n->expr.args[0]) + 1);
 		break;
 	case Obreak:
-		assert(0);
+		fprintf(fd, "break");
 		break;
 	case Ocontinue:
-		assert(0);
+		fprintf(fd, "continue");
 		break;
 	case Outag:
 		emit_expr(fd, n->expr.args[0]);
