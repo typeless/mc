@@ -1186,16 +1186,6 @@ emit_fnbody(FILE *fd, Node *n)
 	emit_block(fd, n->func.body);
 }
 
-static void
-emit_fnlitbody(FILE *fd, Node *n)
-{
-	assert(n->type == Nexpr);
-	assert(n->expr.op == Olit);
-	assert(n->expr.args[0]->type == Nlit);
-	assert(n->expr.args[0]->lit.littype == Lfunc);
-	emit_fnbody(fd, n->expr.args[0]->lit.fnval);
-}
-
 static size_t tysize(Type *t);
 static size_t tyalign(Type *ty);
 
@@ -1460,7 +1450,12 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 
 	if (init) {
 		fprintf(fd, "\n{\n");
-		emit_fnlitbody(fd, init);
+		assert(init->type == Nexpr);
+		assert(init->expr.op == Olit);
+		assert(init->expr.args[0]->type == Nlit);
+		assert(init->expr.args[0]->lit.littype == Lfunc);
+
+		emit_fnbody(fd, init->expr.args[0]->lit.fnval);
 		fprintf(fd, "}\n\n");
 	} else {
 		fprintf(fd, ";\n");
