@@ -1175,7 +1175,7 @@ emit_block(FILE *fd, Node *n)
 }
 
 static void
-emit_func(FILE *fd, Node *n)
+emit_fnbody(FILE *fd, Node *n)
 {
 	// size_t i;
 
@@ -1193,7 +1193,7 @@ emit_fnval(FILE *fd, Node *n)
 	assert(n->expr.op == Olit);
 	assert(n->expr.args[0]->type == Nlit);
 	assert(n->expr.args[0]->lit.littype == Lfunc);
-	emit_func(fd, n->expr.args[0]->lit.fnval);
+	emit_fnbody(fd, n->expr.args[0]->lit.fnval);
 }
 
 static size_t tysize(Type *t);
@@ -1547,7 +1547,7 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 		fprintf(fd, "\t%s /* %s */ _v%ld = %s->_v%ld;\n", __ty(envty), tystr(envty), env[i]->decl.did, "$env", env[i]->decl.did);
 	}
 
-	emit_func(fd, n);
+	emit_fnbody(fd, n);
 	fprintf(fd, "}\n\n");
 }
 
