@@ -1187,7 +1187,7 @@ emit_fnbody(FILE *fd, Node *n)
 }
 
 static void
-emit_fnval(FILE *fd, Node *n)
+emit_fnlitbody(FILE *fd, Node *n)
 {
 	assert(n->type == Nexpr);
 	assert(n->expr.op == Olit);
@@ -1460,7 +1460,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 
 	if (init) {
 		fprintf(fd, "\n{\n");
-		emit_fnval(fd, init);
+		emit_fnlitbody(fd, init);
 		fprintf(fd, "}\n\n");
 	} else {
 		fprintf(fd, ";\n");
@@ -2441,6 +2441,41 @@ genc(FILE *hd, FILE *fd)
 			count++;
 			htput(refcnts, fn, (void *)count);
 		}
+	}
+
+	/* Translate closure to C code */
+	for (i = 0; i < nfnvals; i++) {
+		Type *ft;
+		Type *envpty;
+		Type **sub;
+		Node **env;
+		Node *dcl;
+		size_t nsub;
+		size_t nenv;
+		size_t i;
+
+		Node *n = fnvals[i];
+		assert(n->type == Nfunc);
+
+		dcl = htget(fndcl, n);
+		assert(dcl != NULL);
+		if (isconstfn(dcl))
+			continue;
+
+		env = getclosure(n->func.scope, &nenv);
+		envpty = mktyptr(n->loc, mktystruct(n->loc, env, nenv));
+
+		ft = n->func.type;
+		nsub = 0;
+		sub = NULL;
+		lappend(&sub, &nsub, envpty);
+		for (i = 0; ft->nsub; i++) {
+			lappend(&sub, &nsub, ft->sub[i]);
+		}
+
+		free(ft->sub);
+		ft->sub = sub;
+		ft->nsub = nsub;
 	}
 
 	/* Translate valist arguments to tuple types */
