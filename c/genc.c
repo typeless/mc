@@ -1137,7 +1137,14 @@ emit_stmt(FILE *fd, Node *n)
 		emit_match(fd, n);
 		break;
 	case Nloopstmt:
-		fprintf(fd, "for (;;) {\n");
+		fprintf(fd, "for (");
+		emit_stmt(fd, n->loopstmt.init);
+		fprintf(fd, ";");
+		emit_stmt(fd, n->loopstmt.cond);
+		fprintf(fd, ";");
+		emit_stmt(fd, n->loopstmt.step);
+		fprintf(fd,") {\n");
+		emit_block(fd, n->loopstmt.body);
 		fprintf(fd, "}\n");
 		break;
 	case Nexpr:
