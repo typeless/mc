@@ -2438,7 +2438,7 @@ genc(FILE *hd, FILE *fd)
 		}
 	}
 
-	/* Translate closure to C code */
+	/* Rewrite closure nodes */
 	for (i = 0; i < nfnvals; i++) {
 		Type *ft;
 		Type *envpty;
@@ -2453,12 +2453,14 @@ genc(FILE *hd, FILE *fd)
 		assert(n->type == Nfunc);
 
 		dcl = htget(fndcl, n);
-		assert(dcl != NULL);
-		if (isconstfn(dcl))
+		if (dcl && isconstfn(dcl))
 			continue;
 
 		env = getclosure(n->func.scope, &nenv);
 		envpty = mktyptr(n->loc, mktystruct(n->loc, env, nenv));
+
+		if (!nenv)
+			continue;
 
 		ft = n->func.type;
 		nsub = 0;
