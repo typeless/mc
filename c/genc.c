@@ -1138,7 +1138,7 @@ emit_stmt(FILE *fd, Node *n)
 		break;
 	case Nloopstmt:
 		fprintf(fd, "for (;;) {\n");
-		fprintf(fd, "}");
+		fprintf(fd, "}\n");
 		break;
 	case Nexpr:
 		emit_expr(fd, n);
