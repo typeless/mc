@@ -455,6 +455,7 @@ emit_destructure(FILE *fd, Node *lhs, Node *rhs)
 		} else {
 			lv = args[i];
 			emit_assign(fd, lv, rv);
+			fprintf(fd, ";\n");
 		}
 	}
 }
@@ -481,7 +482,6 @@ emit_assign(FILE *fd, Node *lhs, Node *rhs)
 		default:
 			fatal(lhs, "Invalid lvalue operand of assignment");
 	}
-	fprintf(fd, ";\n");
 }
 
 static void
@@ -1042,7 +1042,6 @@ emit_objdecl(FILE *fd, Node *n)
 		fprintf(fd, " = ");
 		emit_expr(fd, n->decl.init);
 	}
-	fprintf(fd, ";\n");
 }
 
 static void
@@ -1138,18 +1137,20 @@ emit_stmt(FILE *fd, Node *n)
 		break;
 	case Nloopstmt:
 		fprintf(fd, "for (");
-		emit_stmt(fd, n->loopstmt.init);
+		if (n->loopstmt.init)
+			emit_stmt(fd, n->loopstmt.init);
 		fprintf(fd, ";");
-		emit_stmt(fd, n->loopstmt.cond);
+		if (n->loopstmt.cond)
+			emit_stmt(fd, n->loopstmt.cond);
 		fprintf(fd, ";");
-		emit_stmt(fd, n->loopstmt.step);
+		if (n->loopstmt.step)
+			emit_stmt(fd, n->loopstmt.step);
 		fprintf(fd,") {\n");
 		emit_block(fd, n->loopstmt.body);
 		fprintf(fd, "}\n");
 		break;
 	case Nexpr:
 		emit_expr(fd, n);
-		fprintf(fd, ";\n");
 		break;
 	default:
 		assert(0);
@@ -1162,6 +1163,14 @@ emit_block(FILE *fd, Node *n)
 	assert(n->type == Nblock);
 	for (size_t i = 0; i < n->block.nstmts; i++) {
 		emit_stmt(fd, n->block.stmts[i]);
+		switch (n->block.stmts[i]->type) {
+		case Nexpr:
+		case Ndecl:
+			fprintf(fd, ";\n");
+			break;
+		default:
+			fprintf(fd, "\n");
+		}
 	}
 }
 
@@ -2205,6 +2214,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 			fprintf(fd, "/* #%ld did:%ld*/\n", i, n->decl.did);
 			n = fold(n, 1);
 			emit_objdecl(fd, n);
+			fprintf(fd, ";\n");
 		}
 	}
 	fprintf(fd, "/* END OF IMPORTS */\n");
@@ -2219,15 +2229,18 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		if (isconstfn(n))
 			continue;
 		emit_objdecl(fd, n);
+		fprintf(fd, ";\n");
 	}
 
 	/* non-externs */
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (isconstfn(n))
+		if (isconstfn(n)) {
 			genfuncdecl(fd, n, NULL);
-		else
+		} else {
 			emit_objdecl(fd, n);
+			fprintf(fd, ";\n");
+		}
 	}
 	fprintf(fd, "/* END OF EXTERNS */\n");
 
