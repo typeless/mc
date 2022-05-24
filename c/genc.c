@@ -252,6 +252,27 @@ tysubst(Type *t)
 static void emit_expr(FILE *fd, Node *n);
 
 static void
+emit_tycode(FILE *fd, Type *t)
+{
+	fprintf(fd, "%s (*)(", __ty(t->sub[0]));
+	if (t->nsub > 1) {
+		for (size_t i = 1; i < t->nsub; i++) {
+			if (t->sub[i]->type == Tyvalist) {
+				fprintf(fd, "...");
+			} else {
+				fprintf(fd, "%s", __ty(t->sub[i]));
+			}
+			if (i + 1 < t->nsub) {
+				fprintf(fd, ", ");
+			}
+		}
+	} else {
+		fprintf(fd, "void");
+	}
+	fprintf(fd, ")");
+}
+
+static void
 emit_type(FILE *fd, Type *t)
 {
 	int hasns;
@@ -330,34 +351,16 @@ emit_type(FILE *fd, Type *t)
 		break;
 	case Tyfunc:
 		fprintf(fd, "struct {\n");
+		fprintf(fd, "%s _data;\n", __ty(t->sub[1]));
+		fprintf(fd, "typeof(");
+		emit_tycode(fd, t);
+		fprintf(fd, ") _func;\n");
+		fprintf(fd, "}");
+		break;
 	case Tycode:
 		fprintf(fd, "typeof(");
-		fprintf(fd, "%s ", __ty(t->sub[0]));
-		// emit_type(fd, t->sub[0]);
-		fprintf(fd, " (*)(");
-		if (t->nsub > 1) {
-			for (size_t i = 1; i < t->nsub; i++) {
-				// emit_type(fd, t->sub[i]);
-				if (t->sub[i]->type == Tyvalist) {
-					fprintf(fd, "...");
-				} else {
-					fprintf(fd, "%s", __ty(t->sub[i]));
-				}
-				if (i + 1 < t->nsub) {
-					fprintf(fd, ", ");
-				}
-			}
-		} else {
-			fprintf(fd, "void");
-		}
+		emit_tycode(fd, t);
 		fprintf(fd, ")");
-		fprintf(fd, ")");
-
-		if (t->type == Tycode)
-			break;
-		fprintf(fd, " _func;\n");
-		fprintf(fd, "void * _data;\n");
-		fprintf(fd, "}");
 		break;
 	case Tyname:
 	case Tygeneric:
