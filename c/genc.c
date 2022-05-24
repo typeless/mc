@@ -2245,8 +2245,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	/* externs */
 	for (i = 0; i < nk; i++) {
 		n = k[i];
-		if (n->decl.isimport)
-			continue;
+		assert(!n->decl.isimport);
 		if (!n->decl.isextern)
 			continue;
 		if (isconstfn(n))
@@ -2599,6 +2598,7 @@ genc(FILE *hd, FILE *fd)
 		assert(exprop(n) == Olit);
 		fn = n->expr.args[0]->lit.fnval;
 		dcl = htget(fndcl, fn);
+		assert(dcl->type == Ndecl);
 		fprintf(fd, "/* nid:%d@%i */\n", fn->nid, lnum(n->loc));
 		emit_fndef(fd, fn, dcl);
 	}
