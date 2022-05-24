@@ -2487,6 +2487,7 @@ genc(FILE *hd, FILE *fd)
 		Type **sub;
 		Node **env;
 		Node *fn;
+		Node *dcl;
 		size_t nsub;
 		size_t nenv;
 		size_t k;
@@ -2495,8 +2496,12 @@ genc(FILE *hd, FILE *fd)
 
 		assert(n->type == Nexpr);
 
+		if (isconstfn(n)) {
+			n->expr.type = codetype(exprtype(n));
+			continue;
+		}
+		assert(exprop(n) != Ovar);
 		if (exprop(n) == Ovar) {
-			n->expr.type->type = Tycode;
 			continue;
 		}
 		assert(exprop(n) == Olit);
@@ -2504,13 +2509,12 @@ genc(FILE *hd, FILE *fd)
 		ft = fn->func.type;
 		assert(fn->type == Nfunc);
 		env = getclosure(fn->func.scope, &nenv);
-		envpty = nenv ? mktyptr(fn->loc, mktystruct(fn->loc, env, nenv)) : NULL;
+		envpty = mktyptr(fn->loc, mktystruct(fn->loc, env, nenv));
 
 		nsub = 0;
 		sub = NULL;
 		lappend(&sub, &nsub, ft->sub[0]);
-		if (envpty)
-			lappend(&sub, &nsub, envpty);
+		lappend(&sub, &nsub, envpty);
 		for (k = 1; k < ft->nsub; k++) {
 			lappend(&sub, &nsub, tydup(ft->sub[k]));
 		}
@@ -2519,10 +2523,10 @@ genc(FILE *hd, FILE *fd)
 		ft->sub = sub;
 		ft->nsub = nsub;
 
-		//v = gentemp(n->loc, ft, &dcl);
-		//n = mkexpr(a->loc, Oasn, a, b, NULL);
-		//n->expr.type = exprtype(a);
-
+		dcl = htget(fndcl, fn);
+		if (dcl) {
+			dcl->decl.type = tydup(ft);
+		}
 	}
 
 	/* Translate valist arguments to tuple types */
@@ -2598,7 +2602,7 @@ genc(FILE *hd, FILE *fd)
 		assert(exprop(n) == Olit);
 		fn = n->expr.args[0]->lit.fnval;
 		dcl = htget(fndcl, fn);
-		assert(dcl->type == Ndecl);
+		assert(!dcl || dcl->type == Ndecl);
 		fprintf(fd, "/* nid:%d@%i */\n", fn->nid, lnum(n->loc));
 		emit_fndef(fd, fn, dcl);
 	}
