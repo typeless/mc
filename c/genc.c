@@ -2353,8 +2353,9 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 	case Nexpr:
 		switch (exprop(n)) {
 		case Olit:
-			switch (n->expr.type->type) {
-			case Tyfunc:
+			/*FIXME this is a surprising case that Lfunc doesn't have Tyfunc. */
+			switch (n->expr.args[0]->lit.littype) {
+			case Lfunc:
 				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[0]->lit.fnval->func.body, visited);
 				lappend(fnvals, nfnval, n);
 				break;
@@ -2511,7 +2512,7 @@ genc(FILE *hd, FILE *fd)
 		lappend(&sub, &nsub, ft->sub[0]);
 		if (envpty)
 			lappend(&sub, &nsub, envpty);
-		for (k = 1; ft->nsub > 0 && k < ft->nsub - 1; k++) {
+		for (k = 1; k < ft->nsub; k++) {
 			lappend(&sub, &nsub, tydup(ft->sub[k]));
 		}
 
@@ -2590,13 +2591,16 @@ genc(FILE *hd, FILE *fd)
 	/* Output all function definitions */
 	for (i = 0; i < nfnvals; i++) {
 		Node *dcl;
+		Node *fn;
 		Node *n = fnvals[i];
-		Node *fn = n->expr.args[0]->lit.fnval;
 		assert(n->type == Nexpr);
-		assert(exprop(n) == Olit || exprop(n) == Ovar);
+		if (exprop(n) == Ovar)
+			continue;
+		assert(exprop(n) == Olit);
+		fn = n->expr.args[0]->lit.fnval;
 		dcl = htget(fndcl, fn);
 		fprintf(fd, "/* nid:%d@%i */\n", fn->nid, lnum(n->loc));
-		emit_fndef(fd, fnvals[i], dcl);
+		emit_fndef(fd, fn, dcl);
 	}
 
 
