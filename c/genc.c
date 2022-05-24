@@ -2367,6 +2367,7 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
 			break;
 		case Ovar:
+			assert(n->expr.did);
 			if (n->expr.did) {
 				dcl = decls[n->expr.did];
 				assert(dcl);
@@ -2488,6 +2489,7 @@ genc(FILE *hd, FILE *fd)
 		Node **env;
 		Node *fn;
 		Node *dcl;
+		Node *envp;
 		size_t nsub;
 		size_t nenv;
 		size_t k;
@@ -2534,6 +2536,40 @@ genc(FILE *hd, FILE *fd)
 		dcl = htget(fndcl, fn);
 		if (dcl) {
 			dcl->decl.type = tydup(ft);
+		}
+
+		{
+			Node *envd;
+			Srcloc loc;
+			Node **envinit;
+			size_t nenvinit;
+
+			loc = fn->loc;
+			envp = gentemp(loc, envpty, &envd);
+
+			envinit = NULL;
+			nenvinit = 0;
+			for (k = 0; k < nenv; k++) {
+				Node *var;
+				Node *deref;
+				Node *memb;
+				Node *asn;
+
+				var = mkexpr(n->loc, Ovar, env[k]->decl.name, NULL);
+				var->expr.type = env[k]->decl.type;
+				var->expr.did = env[k]->decl.did;
+
+				deref = mkexpr(loc, Oderef, envp, NULL);
+				deref->expr.type = exprtype(envp)->sub[0];
+
+				memb = mkexpr(loc, Omemb, env[k]->decl.name, NULL);
+				memb->expr.type = env[k]->decl.type;
+
+				asn = mkexpr(loc, Oasn, var, memb, NULL);
+				lappend(&envinit, &nenvinit, asn);
+			}
+
+			linsert(&fn->func.args, &fn->func.nargs, 0, envd);
 		}
 	}
 
