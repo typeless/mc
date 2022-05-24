@@ -184,7 +184,7 @@ tydescid(char *buf, size_t bufsz, Type *ty)
 	return buf;
 }
 
-static Type *
+__USED static Type *
 codetype(Type *ft)
 {
 	ft = tybase(ft);
@@ -193,6 +193,18 @@ codetype(Type *ft)
 	assert(ft->type == Tyfunc);
 	ft = tydup(ft);
 	ft->type = Tycode;
+	return ft;
+}
+
+__USED static Type *
+closuretype(Type *ft)
+{
+	ft = tybase(ft);
+	if (ft->type == Tyfunc)
+		return ft;
+	assert(ft->type == Tycode);
+	ft = tydup(ft);
+	ft->type = Tyfunc;
 	return ft;
 }
 
@@ -207,8 +219,11 @@ fillglobls(Stab *st, Htab *globls)
 	k = htkeys(st->dcl, &nk);
 	for (i = 0; i < nk; i++) {
 		s = htget(st->dcl, k[i]);
+		/* Ovar of Tyfunc type doesn't have an Lfunc.
+		 * We cannot translate the type fomr Tyfunc to Tycode by simply
+		 * processing Lfunc nodes. Thus handle it here */
 		if (isconstfn(s))
-			s->decl.type = codetype(s->decl.type);
+			s->decl.type->type = Tycode;
 		htput(globls, s, asmname(s));
 	}
 	free(k);
@@ -383,9 +398,9 @@ emit_type(FILE *fd, Type *t)
 static void
 emit_call(FILE *fd, Node *n)
 {
-	Node **env;
-	Node *dcl;
-	size_t nargs, nenv;
+	Type *ft;
+	Node *fv, **args;
+	size_t nargs;
 	size_t i;
 
 	assert(n->type == Nexpr);
@@ -393,46 +408,33 @@ emit_call(FILE *fd, Node *n)
 	assert(n->expr.args[0]->type == Nexpr);
 	assert(n->expr.args[0]->expr.op == Ovar || n->expr.args[0]->expr.op == Olit);
 
-	nenv = 0;
-	nargs = 0;
-	fprintf(fd, "(");
-	if (n->expr.args[0]->expr.op == Olit) {
-		assert(n->expr.args[0]->type == Nexpr);
-		assert(n->expr.args[0]->expr.op == Olit);
-		assert(n->expr.args[0]->expr.args[0]->type == Nlit);
-		assert(n->expr.args[0]->expr.args[0]->lit.littype == Lfunc);
-		assert(n->expr.args[0]->expr.args[0]->lit.fnval->type == Nfunc);
-		fprintf(fd, "_fn%d", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
+	fv = n->expr.args[0];
+	ft = fv->expr.type;
+	args = &n->expr.args[1];
+	nargs = n->expr.nargs-1;
 
-		nargs = n->expr.args[0]->expr.args[0]->lit.fnval->func.nargs;
-		env = getclosure(n->expr.args[0]->expr.args[0]->lit.fnval->func.scope, &nenv);
-	} else if (n->expr.args[0]->expr.op == Ovar) {
-		dcl = decls[n->expr.args[0]->expr.did];
-		nargs = n->expr.nargs;
-		fprintf(fd, "%s", asmname(dcl));
-	}
-	fprintf(fd, ")");
-
-	fprintf(fd, "(");
-	if (nenv > 0) {
-		fprintf(fd, "%s &(struct _envty$%d){", nargs > 0 ? "," : "", n->expr.args[0]->expr.args[0]->lit.fnval->nid);
-		for (i = 0; i < nenv; i++) {
-			//fprintf(fd, "\t._v%ld = ", env[i]->decl.did);
-			if (env[i]->decl.isglobl)
-				fprintf(fd, "%s,\n", asmname(env[i]));
-			else
-				fprintf(fd, "_v%ld,\n", env[i]->decl.did);
+	if (isconstfn(fv)) {
+		emit_expr(fd, fv);
+		fprintf(fd, "(");
+		for (i = 0; i < nargs; i++) {
+			if (i > 0)
+				fprintf(fd, " ,");
+			emit_expr(fd, args[i]);
 		}
-		fprintf(fd, "}%s", nargs ? "," : "");
-	}
-	for (i = 1; i < nargs; i++) {
-		emit_expr(fd, n->expr.args[i]);
-		if (i + 1 < nargs) {
-			fprintf(fd, " ,");
+		fprintf(fd, ")");
+	} else {
+		fprintf(fd, "({");
+		fprintf(fd, "%s fv = ", __ty(ft));
+		emit_expr(fd, fv);
+		fprintf(fd, "; ");
+		fprintf(fd, "fv._func(");
+		for (i = 0; i < nargs; i++) {
+			if (i > 0)
+				fprintf(fd, " ,");
+			emit_expr(fd, args[i]);
 		}
+		fprintf(fd, ");})");
 	}
-
-	fprintf(fd, ")");
 }
 
 static void emit_assign(FILE *fd, Node *lhs, Node *rhs);
@@ -551,10 +553,32 @@ emit_expr(FILE *fd, Node *n)
 			fprintf(fd, "\", %ld}", args[0]->lit.strval.len);
 			break;
 		case Lfunc:
-			fprintf(fd, "(const %s){", __ty(args[0]->lit.type));
-			fprintf(fd, "_fn%d,", args[0]->lit.fnval->nid);
-			fprintf(fd, "0");
-			fprintf(fd, "}\n");
+			if (isconstfn(n)) {
+			} else {
+				Node **env;
+				size_t nenv;
+				Type *ft;
+
+				ft = args[0]->lit.fnval->func.type;
+				env = getclosure(args[0]->lit.fnval->func.scope, &nenv);
+
+				fprintf(fd, "({ /*closure*/\n");
+				if (nenv > 0) {
+					fprintf(fd, "%s envp = &(%s){", __ty(ft), __ty(ft->sub[0]));
+					for (i = 0; i < nenv; i++) {
+						if (env[i]->decl.isglobl)
+							fprintf(fd, "%s,\n", asmname(env[i]));
+						else
+							fprintf(fd, "_v%ld,\n", env[i]->decl.did);
+					}
+					fprintf(fd, "};");
+				}
+				fprintf(fd, "(const %s){", __ty(args[0]->lit.type));
+				fprintf(fd, nenv ? "&env," : "NULL,");
+				fprintf(fd, "_fn%d", args[0]->lit.fnval->nid);
+				fprintf(fd, "};\n");
+				fprintf(fd, "})\n");
+			}
 			break;
 		case Llbl:
 			fprintf(fd, "_%s:", lblstr(n) + 1);
@@ -910,6 +934,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, ")");
 		break;
 	case Ocall:
+	case Ocallind:
 		emit_call(fd, n);
 		break;
 	case Ocast:
@@ -1465,7 +1490,7 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	}
 }
 
-static void
+__USED static void
 emit_fnenvty(FILE *fd, Node *n)
 {
 	size_t nenv;
@@ -2328,10 +2353,10 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 	case Nexpr:
 		switch (exprop(n)) {
 		case Olit:
-			switch (n->expr.args[0]->lit.littype) {
-			case Lfunc:
+			switch (n->expr.type->type) {
+			case Tyfunc:
 				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[0]->lit.fnval->func.body, visited);
-				lappend(fnvals, nfnval, n->expr.args[0]->lit.fnval);
+				lappend(fnvals, nfnval, n);
 				break;
 			default:;
 			}
@@ -2348,12 +2373,26 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 				init = dcl->decl.init;
 				if (init)
 					scan(fnvals, nfnval, fncalls, nfncalls, init, visited);
+				else switch (dcl->decl.type->type) {
+				case Tyfunc:
+					lappend(fnvals, nfnval, n);
+					break;
+				default:;
+				}
 			}
 			break;
 		default:
 			for (size_t i = 0; i < n->expr.nargs; i++) {
-				if (n->expr.args[i]->type == Nexpr)
+				switch (n->expr.args[i]->type) {
+				case Nexpr:
+				case Ndecl:
 					scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
+					break;
+				case Nname:
+					break;
+				default:
+					assert(0);
+				}
 			}
 			break;
 		}
@@ -2447,35 +2486,43 @@ genc(FILE *hd, FILE *fd)
 		Type *envpty;
 		Type **sub;
 		Node **env;
-		Node *dcl;
+		Node *fn;
 		size_t nsub;
 		size_t nenv;
-		size_t i;
+		size_t k;
 
 		Node *n = fnvals[i];
-		assert(n->type == Nfunc);
 
-		dcl = htget(fndcl, n);
-		if (dcl && isconstfn(dcl))
+		assert(n->type == Nexpr);
+
+		if (exprop(n) == Ovar) {
+			n->expr.type->type = Tycode;
 			continue;
+		}
+		assert(exprop(n) == Olit);
+		fn = n->expr.args[0]->lit.fnval;
+		ft = fn->func.type;
+		assert(fn->type == Nfunc);
+		env = getclosure(fn->func.scope, &nenv);
+		envpty = nenv ? mktyptr(fn->loc, mktystruct(fn->loc, env, nenv)) : NULL;
 
-		env = getclosure(n->func.scope, &nenv);
-		envpty = mktyptr(n->loc, mktystruct(n->loc, env, nenv));
-
-		if (!nenv)
-			continue;
-
-		ft = n->func.type;
 		nsub = 0;
 		sub = NULL;
-		lappend(&sub, &nsub, envpty);
-		for (i = 0; ft->nsub; i++) {
-			lappend(&sub, &nsub, ft->sub[i]);
+		lappend(&sub, &nsub, ft->sub[0]);
+		if (envpty)
+			lappend(&sub, &nsub, envpty);
+		for (k = 1; ft->nsub > 0 && k < ft->nsub - 1; k++) {
+			lappend(&sub, &nsub, tydup(ft->sub[k]));
 		}
 
 		free(ft->sub);
 		ft->sub = sub;
 		ft->nsub = nsub;
+
+		//v = gentemp(n->loc, ft, &dcl);
+		//n = mkexpr(a->loc, Oasn, a, b, NULL);
+		//n->expr.type = exprtype(a);
+
 	}
 
 	/* Translate valist arguments to tuple types */
@@ -2535,18 +2582,20 @@ genc(FILE *hd, FILE *fd)
 	gentypes(fd);
 
 	/* Output all struct defining func env */
-	for (i = 0; i < nfnvals; i++) {
-		assert(fnvals[i]->type == Nfunc);
-		emit_fnenvty(fd, fnvals[i]);
-	}
+	//for (i = 0; i < nfnvals; i++) {
+	//	assert(fnvals[i]->type == Nfunc);
+	//	emit_fnenvty(fd, fnvals[i]);
+	//}
 
 	/* Output all function definitions */
 	for (i = 0; i < nfnvals; i++) {
 		Node *dcl;
 		Node *n = fnvals[i];
-		assert(n->type == Nfunc);
-		dcl = htget(fndcl, n);
-		fprintf(fd, "/* nid:%d@%i */\n", n->nid, lnum(n->loc));
+		Node *fn = n->expr.args[0]->lit.fnval;
+		assert(n->type == Nexpr);
+		assert(exprop(n) == Olit || exprop(n) == Ovar);
+		dcl = htget(fndcl, fn);
+		fprintf(fd, "/* nid:%d@%i */\n", fn->nid, lnum(n->loc));
 		emit_fndef(fd, fnvals[i], dcl);
 	}
 
