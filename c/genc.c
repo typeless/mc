@@ -2508,6 +2508,14 @@ genc(FILE *hd, FILE *fd)
 		fn = n->expr.args[0]->lit.fnval;
 		ft = fn->func.type;
 		assert(fn->type == Nfunc);
+
+		dcl = htget(fndcl, fn);
+		if (dcl && isconstfn(dcl)) {
+			dcl->decl.type = codetype(decltype(dcl));
+			continue;
+		}
+
+
 		env = getclosure(fn->func.scope, &nenv);
 		envpty = mktyptr(fn->loc, mktystruct(fn->loc, env, nenv));
 
