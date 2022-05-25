@@ -2052,9 +2052,8 @@ sort_decls_rec(
 	case Nexpr:
 		switch (exprop(n)) {
 		case Ovar:
-			assert(n->expr.did);
-			dcl = decls[n->expr.did];
-			if (dcl) {
+			if (n->expr.did) {
+				dcl = decls[n->expr.did];
 				n->expr.did =  dcl->decl.did;
 				sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, dcl, visited, tyvisited, count);
 				sort_types_rec(utypes, nutypes, n->expr.type, tyvisited);
