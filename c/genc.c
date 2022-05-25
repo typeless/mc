@@ -211,9 +211,9 @@ closuretype(Type *ft)
 static void
 fillglobls(Stab *st, Htab *globls)
 {
-	size_t i, j, nk, nns;
-	void **k, **ns;
-	Stab *stab;
+	size_t i, nk;
+	void **k;
+	//void **ns;
 	Node *s;
 
 	k = htkeys(st->dcl, &nk);
@@ -228,17 +228,17 @@ fillglobls(Stab *st, Htab *globls)
 	}
 	free(k);
 
-	ns = htkeys(file.ns, &nns);
-	for (j = 0; j < nns; j++) {
-		stab = htget(file.ns, ns[j]);
-		k = htkeys(stab->dcl, &nk);
-		for (i = 0; i < nk; i++) {
-			s = htget(stab->dcl, k[i]);
-			htput(globls, s, asmname(s));
-		}
-		free(k);
-	}
-	free(ns);
+	//ns = htkeys(file.ns, &nns);
+	//for (j = 0; j < nns; j++) {
+	//	stab = htget(file.ns, ns[j]);
+	//	k = htkeys(stab->dcl, &nk);
+	//	for (i = 0; i < nk; i++) {
+	//		s = htget(stab->dcl, k[i]);
+	//		htput(globls, s, asmname(s));
+	//	}
+	//	free(k);
+	//}
+	//free(ns);
 }
 
 char *
@@ -366,10 +366,20 @@ emit_type(FILE *fd, Type *t)
 		break;
 	case Tyfunc:
 		fprintf(fd, "struct {\n");
-		fprintf(fd, "%s _data;\n", __ty(t->sub[1]));
-		fprintf(fd, "typeof(");
-		emit_tycode(fd, t);
-		fprintf(fd, ") _func;\n");
+		fprintf(fd, "void *_data;\n");
+		fprintf(fd, "typeof (");
+		fprintf(fd, "%s (*)(void *", __ty(t->sub[0]));
+		if (t->nsub > 1) {
+			for (size_t i = 1; i < t->nsub; i++) {
+				fprintf(fd, ", ");
+				if (t->sub[i]->type == Tyvalist) {
+					fprintf(fd, "...");
+				} else {
+					fprintf(fd, "%s", __ty(t->sub[i]));
+				}
+			}
+		}
+		fprintf(fd, ")) _func;\n");
 		fprintf(fd, "}");
 		break;
 	case Tycode:
@@ -427,10 +437,9 @@ emit_call(FILE *fd, Node *n)
 		fprintf(fd, "%s fv = ", __ty(ft));
 		emit_expr(fd, fv);
 		fprintf(fd, "; ");
-		fprintf(fd, "fv._func(");
+		fprintf(fd, "fv._func(fv._data");
 		for (i = 0; i < nargs; i++) {
-			if (i > 0)
-				fprintf(fd, " ,");
+			fprintf(fd, ", ");
 			emit_expr(fd, args[i]);
 		}
 		fprintf(fd, ");})");
@@ -1501,12 +1510,12 @@ emit_fnenvty(FILE *fd, Node *n)
 	nenv = 0;
 	env = getclosure(n->func.scope, &nenv);
 	if (nenv) {
-		fprintf(fd, "struct _envty$%d {\n", n->nid);
+		fprintf(fd, "typedef struct _envty$%d {\n", n->nid);
 		for (size_t i = 0; i < nenv; i++) {
 			Type *envty = decltype(env[i]);
 			fprintf(fd, "\t%s /* %s */ _v%ld /* %s */;\n", __ty(envty), tystr(envty), env[i]->decl.did, declname(env[i]));
 		}
-		fprintf(fd, "};\n\n");
+		fprintf(fd, "} _envty$%d;\n\n", n->nid);
 	}
 }
 
@@ -2090,6 +2099,11 @@ sort_decls_rec(
 			die("cyclic decls");
 		bsput(mark, n->decl.did);
 
+		if (isconstfn(n)) {
+			n->decl.type->type = Tycode;
+			if (n->decl.init)
+				exprtype(n->decl.init)->type = Tycode;
+		}
 		if (n->decl.init) {
 			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->decl.init, visited, tyvisited, count);
 		}
@@ -2120,6 +2134,8 @@ sort_decls_rec(
 	case Nfunc:
 		pushstab(n->func.scope);
 		sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->func.body, visited, tyvisited, count);
+		for (i = 0; i < n->func.nargs; i++)
+			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->func.args[i], visited, tyvisited, count);
 		sort_types_rec(utypes, nutypes, n->func.type, tyvisited);
 		popstab();
 		break;
@@ -2174,6 +2190,7 @@ sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Type **
 	Bitset *tyvisited;
 	size_t i;
 	Htab *count;
+	Node *d;
 
 	count = mkht(varhash, vareq);
 
@@ -2181,12 +2198,19 @@ sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Type **
 	tyvisited = mkbs();
 	pushstab(file.globls);
 	for (i = 0; i < n; i++) {
-		if (decls[i]->decl.isimport)
+		d = decls[i];
+		if (d->decl.isimport)
 			continue;
-		if (decls[i]->decl.isgeneric)
+		if (d->decl.isgeneric)
 			continue;
 
-		sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, decls[i], visited, tyvisited, count);
+		sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, d, visited, tyvisited, count);
+		if (isconstfn(d))
+			assert(decltype(d)->type == Tycode 
+					&& (!d->decl.init 
+						|| (exprtype(d->decl.init)->type == Tycode 
+							&& d->decl.init->expr.args[0]->lit.type->type == Tycode 
+							&& d->decl.init->expr.args[0]->lit.fnval->func.type->type == Tycode)));
 	}
 	popstab();
 	bsfree(tyvisited);
@@ -2205,12 +2229,22 @@ static void
 emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 {
 	Node **unsorted;
+	Node **roots;
 	Node **k, **imports;
 	Node *n;
 	Type **utypes;
+	size_t nroots;
 	size_t i, nk, nimports, nglobls, nutypes;
 
 	unsorted = (Node **)htkeys(globls, &nglobls);
+
+	nroots = 0;
+	roots = NULL;
+	for (i = 0; i < nglobls; i++) {
+		n = unsorted[i];
+		if (isconstfn(n) && !n->decl.isimport)
+			lappend(&roots, &nroots, n);
+	}
 
 	nk = 0;
 	k = NULL;
@@ -2218,7 +2252,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	imports = NULL;
 	nutypes = 0;
 	utypes = NULL;
-	sort_decls(&k, &nk, &imports, &nimports, &utypes, &nutypes, unsorted, nglobls);
+	sort_decls(&k, &nk, &imports, &nimports, &utypes, &nutypes, roots, nroots);
 	for (i = 0; i < nk; i++)
 		fprintf(fd, "/* sorted(%ld): %s did:%ld */\n", i, declname(k[i]), k[i]->decl.did);
 
@@ -2404,6 +2438,8 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 	case Nfunc:
 		pushstab(n->func.scope);
 		scan(fnvals, nfnval, fncalls, nfncalls, n->func.body, visited);
+		for (i = 0; i < n->func.nargs; i++)
+			scan(fnvals, nfnval, fncalls, nfncalls, n->func.args[i], visited);
 		popstab();
 		break;
 	default:
@@ -2482,96 +2518,105 @@ genc(FILE *hd, FILE *fd)
 	}
 
 	/* Rewrite closure nodes */
-	for (i = 0; i < nfnvals; i++) {
-		Type *ft;
-		Type *envpty;
-		Type **sub;
-		Node **env;
-		Node *fn;
-		Node *dcl;
-		Node *envp;
-		size_t nsub;
-		size_t nenv;
-		size_t k;
+	//for (i = 0; i < nfnvals; i++) {
+	//	Type *ft;
+	//	Type *envpty;
+	//	Type **sub;
+	//	Node **env;
+	//	Node *fn;
+	//	Node *dcl;
+	//	Node *envp;
+	//	size_t nsub;
+	//	size_t nenv;
+	//	size_t k;
 
-		Node *n = fnvals[i];
+	//	Node *n = fnvals[i];
 
-		assert(n->type == Nexpr);
+	//	assert(n->type == Nexpr);
 
-		if (isconstfn(n)) {
-			n->expr.type = codetype(exprtype(n));
-			continue;
-		}
-		assert(exprop(n) != Ovar);
-		if (exprop(n) == Ovar) {
-			continue;
-		}
-		assert(exprop(n) == Olit);
-		fn = n->expr.args[0]->lit.fnval;
-		ft = fn->func.type;
-		assert(fn->type == Nfunc);
+	//	if (isconstfn(n)) {
+	//		//n->expr.type = codetype(exprtype(n));
+	//		n->expr.type->type = Tycode;
+	//		continue;
+	//	}
+	//	if (exprop(n) == Ovar) {
+	//		continue;
+	//	}
+	//	assert(exprop(n) == Olit);
+	//	fn = n->expr.args[0]->lit.fnval;
+	//	ft = fn->func.type;
+	//	assert(fn->type == Nfunc);
 
-		dcl = htget(fndcl, fn);
-		if (dcl && isconstfn(dcl)) {
-			dcl->decl.type = codetype(decltype(dcl));
-			continue;
-		}
+	//	dcl = htget(fndcl, fn);
+	//	if (dcl && isconstfn(dcl)) {
+	//		//dcl->decl.type = codetype(decltype(dcl));
+	//		dcl->decl.type->type = Tycode;
+	//		continue;
+	//	}
 
 
-		env = getclosure(fn->func.scope, &nenv);
-		envpty = mktyptr(fn->loc, mktystruct(fn->loc, env, nenv));
+	//	//env = getclosure(fn->func.scope, &nenv);
+	//	//envpty = mktyptr(fn->loc, mktystruct(fn->loc, env, nenv));
 
-		nsub = 0;
-		sub = NULL;
-		lappend(&sub, &nsub, ft->sub[0]);
-		lappend(&sub, &nsub, envpty);
-		for (k = 1; k < ft->nsub; k++) {
-			lappend(&sub, &nsub, tydup(ft->sub[k]));
-		}
+	//	//nsub = 0;
+	//	//sub = NULL;
+	//	//lappend(&sub, &nsub, envpty);
+	//	//for (k = 1; k < ft->nsub; k++) {
+	//	//	lappend(&sub, &nsub, tydup(ft->sub[k]));
+	//	//}
 
-		free(ft->sub);
-		ft->sub = sub;
-		ft->nsub = nsub;
+	//	//{
+	//	//	Node **memb;
+	//	//	size_t nmemb;
+	//	//	Node *tycode;
+	//	//	Node *fty;
 
-		dcl = htget(fndcl, fn);
-		if (dcl) {
-			dcl->decl.type = tydup(ft);
-		}
+	//	//	tycode = mktyfunc(ft->loc, sub, nsub, ft->sub[0]);
+	//	//	tycode->type = Tycode;
 
-		{
-			Node *envd;
-			Srcloc loc;
-			Node **envinit;
-			size_t nenvinit;
+	//	//	memb = NULL;
+	//	//	nmemb = 0;
+	//	//	lappend(&memb, &nmemb, mkdecl(fn->loc, mkname(fn->loc, "_envp"), envpty));
+	//	//	lappend(&memb, &nmemb, mkdecl(fn->loc, mkname(fn->loc, "_func"), tycode));
+	//	//	fty = mktystruct(ft->loc, memb, nmemb);
 
-			loc = fn->loc;
-			envp = gentemp(loc, envpty, &envd);
+	//	//	fn->func.type = fty;
+	//	//}
 
-			envinit = NULL;
-			nenvinit = 0;
-			for (k = 0; k < nenv; k++) {
-				Node *var;
-				Node *deref;
-				Node *memb;
-				Node *asn;
+	//	{
+	//		Node *envd;
+	//		Srcloc loc;
+	//		Node **envinit;
+	//		size_t nenvinit;
 
-				var = mkexpr(n->loc, Ovar, env[k]->decl.name, NULL);
-				var->expr.type = env[k]->decl.type;
-				var->expr.did = env[k]->decl.did;
+	//		loc = fn->loc;
+	//		envp = gentemp(loc, envpty, &envd);
 
-				deref = mkexpr(loc, Oderef, envp, NULL);
-				deref->expr.type = exprtype(envp)->sub[0];
+	//		envinit = NULL;
+	//		nenvinit = 0;
+	//		for (k = 0; k < nenv; k++) {
+	//			Node *var;
+	//			Node *deref;
+	//			Node *memb;
+	//			Node *asn;
 
-				memb = mkexpr(loc, Omemb, env[k]->decl.name, NULL);
-				memb->expr.type = env[k]->decl.type;
+	//			var = mkexpr(n->loc, Ovar, env[k]->decl.name, NULL);
+	//			var->expr.type = env[k]->decl.type;
+	//			var->expr.did = env[k]->decl.did;
 
-				asn = mkexpr(loc, Oasn, var, memb, NULL);
-				lappend(&envinit, &nenvinit, asn);
-			}
+	//			deref = mkexpr(loc, Oderef, envp, NULL);
+	//			deref->expr.type = exprtype(envp)->sub[0];
 
-			linsert(&fn->func.args, &fn->func.nargs, 0, envd);
-		}
-	}
+	//			memb = mkexpr(loc, Omemb, env[k]->decl.name, NULL);
+	//			memb->expr.type = env[k]->decl.type;
+
+	//			asn = mkexpr(loc, Oasn, var, memb, NULL);
+	//			lappend(&envinit, &nenvinit, asn);
+	//		}
+
+	//		linsert(&fn->func.args, &fn->func.nargs, 0, envd);
+	//	}
+	//}
 
 	/* Translate valist arguments to tuple types */
 	for (i = 0; i < nfncalls; i++) {
@@ -2630,10 +2675,21 @@ genc(FILE *hd, FILE *fd)
 	gentypes(fd);
 
 	/* Output all struct defining func env */
-	//for (i = 0; i < nfnvals; i++) {
-	//	assert(fnvals[i]->type == Nfunc);
-	//	emit_fnenvty(fd, fnvals[i]);
-	//}
+	for (i = 0; i < nfnvals; i++) {
+		Node *n = fnvals[i];
+		Node *fnval;
+		assert(n->type == Nexpr);
+		switch (exprop(n)) {
+		case Olit:
+			fnval = n->expr.args[0]->lit.fnval;
+			break;
+		case Ovar:
+			continue;
+		default:
+			assert(0);
+		}
+		emit_fnenvty(fd, fnval);
+	}
 
 	/* Output all function definitions */
 	for (i = 0; i < nfnvals; i++) {
