@@ -1955,7 +1955,7 @@ gentype(FILE *fd, Type *ty)
 }
 
 static void
-sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited, int istycode)
+sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited)
 {
 	Type *u;
 	size_t i;
@@ -1993,18 +1993,18 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited, int is
 	case Tycode:
 	case Tyname:
 		for (i = 0; i < t->nsub; i++)
-			sort_types_rec(utypes, nutypes, t->sub[i], visited, 0);
+			sort_types_rec(utypes, nutypes, t->sub[i], visited);
 		break;
 	case Tystruct:
 		for (i = 0; i < t->nmemb; i++) {
-			sort_types_rec(utypes, nutypes, decltype(t->sdecls[i]), visited, 0);
+			sort_types_rec(utypes, nutypes, decltype(t->sdecls[i]), visited);
 		}
 		break;
 	case Tyunion:
 		for (i = 0; i < t->nmemb; i++) {
 			u = t->udecls[i]->etype;
 			if (u)
-				sort_types_rec(utypes, nutypes, u, visited, 0);
+				sort_types_rec(utypes, nutypes, u, visited);
 		}
 		break;
 	case Tygeneric:
@@ -2014,8 +2014,6 @@ sort_types_rec(Type ***utypes, size_t *nutypes, Type *t, Bitset *visited, int is
 		fprintf(stderr, "/* Invalid type: %s(%s) id: %d */", tystr(t), tytystr(t), t->tid);
 		assert(0);
 	}
-	if (t->type == Tyfunc && istycode)
-		t = codetype(t);
 	lappend(utypes, nutypes, t);
 }
 
@@ -2053,7 +2051,7 @@ sort_decls_rec(
 			if (dcl) {
 				n->expr.did =  dcl->decl.did;
 				sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, dcl, visited, tyvisited, count);
-				sort_types_rec(utypes, nutypes, n->expr.type, tyvisited, isconstfn(n));
+				sort_types_rec(utypes, nutypes, n->expr.type, tyvisited);
 			}
 			break;
 		case Olit:
@@ -2070,11 +2068,11 @@ sort_decls_rec(
 				switch (n->expr.args[i]->type) {
 				case Nexpr:
 					sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->expr.args[i], visited, tyvisited, count);
-					sort_types_rec(utypes, nutypes, n->expr.args[i]->expr.type, tyvisited, isconstfn(n->expr.args[i]));
+					sort_types_rec(utypes, nutypes, n->expr.args[i]->expr.type, tyvisited);
 					break;
 				case Ndecl:
 					sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->expr.args[i], visited, tyvisited, count);
-					sort_types_rec(utypes, nutypes, n->expr.args[i]->decl.type, tyvisited, isconstfn(n->expr.args[i]));
+					sort_types_rec(utypes, nutypes, n->expr.args[i]->decl.type, tyvisited);
 					break;
 				case Nname:
 					break;
@@ -2095,7 +2093,7 @@ sort_decls_rec(
 		if (n->decl.init) {
 			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->decl.init, visited, tyvisited, count);
 		}
-		sort_types_rec(utypes, nutypes, n->decl.type, tyvisited, isconstfn(n));
+		sort_types_rec(utypes, nutypes, n->decl.type, tyvisited);
 		bsdel(mark, n->decl.did);
 
 		if (hthas(count, n))
@@ -2113,7 +2111,7 @@ sort_decls_rec(
 		switch (n->lit.littype) {
 		case Lfunc:
 			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->lit.fnval, visited, tyvisited, count);
-			sort_types_rec(utypes, nutypes, n->lit.type, tyvisited, 0);
+			sort_types_rec(utypes, nutypes, n->lit.type, tyvisited);
 			break;
 		default:
 			;
@@ -2122,7 +2120,7 @@ sort_decls_rec(
 	case Nfunc:
 		pushstab(n->func.scope);
 		sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->func.body, visited, tyvisited, count);
-		sort_types_rec(utypes, nutypes, n->func.type, tyvisited, 0);
+		sort_types_rec(utypes, nutypes, n->func.type, tyvisited);
 		popstab();
 		break;
 	case Nblock:
