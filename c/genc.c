@@ -2042,7 +2042,6 @@ sort_decls_rec(
 	Node *dcl;
 	size_t i;
 	Bitset *mark;
-	Stab *ns;
 
 	if (!n)
 		return;
@@ -2053,10 +2052,8 @@ sort_decls_rec(
 	case Nexpr:
 		switch (exprop(n)) {
 		case Ovar:
-			ns = curstab();
-			if (n->expr.args[0]->name.ns)
-				ns = getns(n->expr.args[0]->name.ns);
-			dcl = getdcl(ns, n->expr.args[0]);
+			assert(n->expr.did);
+			dcl = decls[n->expr.did];
 			if (dcl) {
 				n->expr.did =  dcl->decl.did;
 				sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, dcl, visited, tyvisited, count);
