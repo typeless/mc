@@ -211,10 +211,11 @@ closuretype(Type *ft)
 static void
 fillglobls(Stab *st, Htab *globls)
 {
-	size_t i, nk;
+	size_t i, j, nk, nns;
 	void **k;
-	//void **ns;
+	void **ns;
 	Node *s;
+	Stab *stab;
 
 	k = htkeys(st->dcl, &nk);
 	for (i = 0; i < nk; i++) {
@@ -228,17 +229,17 @@ fillglobls(Stab *st, Htab *globls)
 	}
 	free(k);
 
-	//ns = htkeys(file.ns, &nns);
-	//for (j = 0; j < nns; j++) {
-	//	stab = htget(file.ns, ns[j]);
-	//	k = htkeys(stab->dcl, &nk);
-	//	for (i = 0; i < nk; i++) {
-	//		s = htget(stab->dcl, k[i]);
-	//		htput(globls, s, asmname(s));
-	//	}
-	//	free(k);
-	//}
-	//free(ns);
+	ns = htkeys(file.ns, &nns);
+	for (j = 0; j < nns; j++) {
+		stab = htget(file.ns, ns[j]);
+		k = htkeys(stab->dcl, &nk);
+		for (i = 0; i < nk; i++) {
+			s = htget(stab->dcl, k[i]);
+			htput(globls, s, asmname(s));
+		}
+		free(k);
+	}
+	free(ns);
 }
 
 char *
@@ -2040,6 +2041,7 @@ sort_decls_rec(
 	Node *dcl;
 	size_t i;
 	Bitset *mark;
+	//Stab *ns;
 
 	if (!n)
 		return;
@@ -2058,7 +2060,7 @@ sort_decls_rec(
 				dcl = mkdecl(Zloc, n->expr.args[0], n->expr.type);
 				dcl->decl.vis = Vishidden;
 				dcl->decl.isimport = 1;
-				dcl->decl.isextern = 1;
+				dcl->decl.isconst = 1;
 				lappend(imports, nimports, dcl);
 			}
 			break;
@@ -2104,7 +2106,8 @@ sort_decls_rec(
 				exprtype(n->decl.init)->type = Tycode;
 		}
 		if (n->decl.init) {
-			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, n->decl.init, visited, tyvisited, count);
+			Node *c = n->decl.isconst ? fold(n->decl.init, 1) : n->decl.init;
+			sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, c, visited, tyvisited, count);
 		}
 		sort_types_rec(utypes, nutypes, n->decl.type, tyvisited);
 		bsdel(mark, n->decl.did);
