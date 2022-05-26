@@ -1050,10 +1050,9 @@ emit_objdecl(FILE *fd, Node *n)
 	assert(n->type == Ndecl);
 	char name[256];
 
-	if (n->decl.isextern) {
+	if (n->decl.isextern || n->decl.isimport) {
 		fprintf(fd, "extern ");
-	}
-	if (!n->decl.isextern && n->decl.isglobl) {
+	} else if (n->decl.isglobl) {
 		if (n->decl.vis == Visintern || n->decl.vis == Vishidden) {
 			fprintf(fd, "static ");
 		}
@@ -1436,7 +1435,6 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 		fprintf(fd, "};\n\n");
 	}
 
-	fprintf(fd, "/* vis:%d isimport:%d\n*/\n", n->decl.vis, n->decl.isimport);
 	if (n->decl.isextern || n->decl.isimport) {
 		fprintf(fd, "extern ");
 	}
@@ -2054,9 +2052,14 @@ sort_decls_rec(
 		case Ovar:
 			if (n->expr.did) {
 				dcl = decls[n->expr.did];
-				n->expr.did =  dcl->decl.did;
 				sort_decls_rec(out, nout, imports, nimports, utypes, nutypes, dcl, visited, tyvisited, count);
 				sort_types_rec(utypes, nutypes, n->expr.type, tyvisited);
+			} else {
+				dcl = mkdecl(Zloc, n->expr.args[0], n->expr.type);
+				dcl->decl.vis = Vishidden;
+				dcl->decl.isimport = 1;
+				dcl->decl.isextern = 1;
+				lappend(imports, nimports, dcl);
 			}
 			break;
 		case Olit:
@@ -2261,10 +2264,10 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		n = imports[i];
 		assert(n->decl.isimport);
 
+		fprintf(fd, "/* import #%ld did:%ld*/\n", i, n->decl.did);
 		if (isconstfn(n)) {
 			genfuncdecl(fd, n, NULL);
 		} else {
-			fprintf(fd, "/* #%ld did:%ld*/\n", i, n->decl.did);
 			n = fold(n, 1);
 			emit_objdecl(fd, n);
 			fprintf(fd, ";\n");
@@ -2512,107 +2515,6 @@ genc(FILE *hd, FILE *fd)
 			htput(refcnts, fn, (void *)count);
 		}
 	}
-
-	/* Rewrite closure nodes */
-	//for (i = 0; i < nfnvals; i++) {
-	//	Type *ft;
-	//	Type *envpty;
-	//	Type **sub;
-	//	Node **env;
-	//	Node *fn;
-	//	Node *dcl;
-	//	Node *envp;
-	//	size_t nsub;
-	//	size_t nenv;
-	//	size_t k;
-
-	//	Node *n = fnvals[i];
-
-	//	assert(n->type == Nexpr);
-
-	//	if (isconstfn(n)) {
-	//		//n->expr.type = codetype(exprtype(n));
-	//		n->expr.type->type = Tycode;
-	//		continue;
-	//	}
-	//	if (exprop(n) == Ovar) {
-	//		continue;
-	//	}
-	//	assert(exprop(n) == Olit);
-	//	fn = n->expr.args[0]->lit.fnval;
-	//	ft = fn->func.type;
-	//	assert(fn->type == Nfunc);
-
-	//	dcl = htget(fndcl, fn);
-	//	if (dcl && isconstfn(dcl)) {
-	//		//dcl->decl.type = codetype(decltype(dcl));
-	//		dcl->decl.type->type = Tycode;
-	//		continue;
-	//	}
-
-
-	//	//env = getclosure(fn->func.scope, &nenv);
-	//	//envpty = mktyptr(fn->loc, mktystruct(fn->loc, env, nenv));
-
-	//	//nsub = 0;
-	//	//sub = NULL;
-	//	//lappend(&sub, &nsub, envpty);
-	//	//for (k = 1; k < ft->nsub; k++) {
-	//	//	lappend(&sub, &nsub, tydup(ft->sub[k]));
-	//	//}
-
-	//	//{
-	//	//	Node **memb;
-	//	//	size_t nmemb;
-	//	//	Node *tycode;
-	//	//	Node *fty;
-
-	//	//	tycode = mktyfunc(ft->loc, sub, nsub, ft->sub[0]);
-	//	//	tycode->type = Tycode;
-
-	//	//	memb = NULL;
-	//	//	nmemb = 0;
-	//	//	lappend(&memb, &nmemb, mkdecl(fn->loc, mkname(fn->loc, "_envp"), envpty));
-	//	//	lappend(&memb, &nmemb, mkdecl(fn->loc, mkname(fn->loc, "_func"), tycode));
-	//	//	fty = mktystruct(ft->loc, memb, nmemb);
-
-	//	//	fn->func.type = fty;
-	//	//}
-
-	//	{
-	//		Node *envd;
-	//		Srcloc loc;
-	//		Node **envinit;
-	//		size_t nenvinit;
-
-	//		loc = fn->loc;
-	//		envp = gentemp(loc, envpty, &envd);
-
-	//		envinit = NULL;
-	//		nenvinit = 0;
-	//		for (k = 0; k < nenv; k++) {
-	//			Node *var;
-	//			Node *deref;
-	//			Node *memb;
-	//			Node *asn;
-
-	//			var = mkexpr(n->loc, Ovar, env[k]->decl.name, NULL);
-	//			var->expr.type = env[k]->decl.type;
-	//			var->expr.did = env[k]->decl.did;
-
-	//			deref = mkexpr(loc, Oderef, envp, NULL);
-	//			deref->expr.type = exprtype(envp)->sub[0];
-
-	//			memb = mkexpr(loc, Omemb, env[k]->decl.name, NULL);
-	//			memb->expr.type = env[k]->decl.type;
-
-	//			asn = mkexpr(loc, Oasn, var, memb, NULL);
-	//			lappend(&envinit, &nenvinit, asn);
-	//		}
-
-	//		linsert(&fn->func.args, &fn->func.nargs, 0, envd);
-	//	}
-	//}
 
 	/* Translate valist arguments to tuple types */
 	for (i = 0; i < nfncalls; i++) {
