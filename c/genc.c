@@ -994,20 +994,8 @@ emit_expr(FILE *fd, Node *n)
 		}
 		break;
 	case Ovar:
-		{
-			Stab *ns;
-			/* When an expr comes from imports, the did is not preserved.
-			 * So we have to look it up from the symbol table */
-			if (n->expr.did) {
-				dcl = decls[n->expr.did];
-			} else {
-				ns = curstab();
-				if (n->expr.args[0]->name.ns)
-					ns = getns(n->expr.args[0]->name.ns);
-				dcl = getdcl(ns, n->expr.args[0]);
-				assert(dcl);
-			}
-		}
+		assert(n->expr.did);
+		dcl = decls[n->expr.did];
 
 
 		//dcl = decls[n->expr.did];
@@ -1077,7 +1065,7 @@ emit_objdecl(FILE *fd, Node *n)
 
 	if (n->decl.init) {
 		fprintf(fd, " = ");
-		emit_expr(fd, n->decl.init);
+		emit_expr(fd, fold(n->decl.init, 1));
 	}
 }
 
