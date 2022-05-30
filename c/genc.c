@@ -366,6 +366,8 @@ emit_type(FILE *fd, Type *t)
 		fprintf(fd, "*p; size_t len /* size_t */; }");
 		break;
 	case Tyfunc:
+		/* We don't know whether the function type should attach an envp,
+		 * so we can't conditionally eliminate envp at the moment */
 		fprintf(fd, "struct {\n");
 		fprintf(fd, "void *_data;\n");
 		fprintf(fd, "typeof (");
@@ -426,10 +428,9 @@ emit_call(FILE *fd, Node *n)
 
 	if (isconstfn(fv)) {
 		emit_expr(fd, fv);
-		fprintf(fd, "(");
+		fprintf(fd, "(NULL");
 		for (i = 0; i < nargs; i++) {
-			if (i > 0)
-				fprintf(fd, " ,");
+			fprintf(fd, ", ");
 			emit_expr(fd, args[i]);
 		}
 		fprintf(fd, ")");
@@ -563,8 +564,7 @@ emit_expr(FILE *fd, Node *n)
 			fprintf(fd, "\", %ld}", args[0]->lit.strval.len);
 			break;
 		case Lfunc:
-			if (isconstfn(n)) {
-			} else {
+			if (1) {
 				Node **env;
 				size_t nenv;
 				Type *ft;
@@ -953,6 +953,10 @@ emit_expr(FILE *fd, Node *n)
 		case Tyslice:
 			emit_expr(fd, n->expr.args[0]);
 			fprintf(fd, ".p");
+			break;
+		case Tyfunc:
+			emit_expr(fd, n->expr.args[0]);
+			fprintf(fd,"._func");
 			break;
 		default:
 			emit_expr(fd, n->expr.args[0]);
@@ -1437,15 +1441,19 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 	fprintf(fd, "%s ", __ty(t->sub[0]));
 	fprintf(fd, "%s(", asmname(n));
 
-	if (nenv > 0) {
-		fprintf(fd, ", struct $%s$env %s%s", declname(n), "$env", nargs ? "," : "");
-	}
+	//if (nenv > 0) {
+	//	fprintf(fd, ", struct $%s$env %s%s", declname(n), "$env", nargs ? "," : "");
+	//}
+	fprintf(fd, "void * $env%s", nargs ? "," : "");
 
 	/* Insert the parameter for closure env (which may be an empty struct) */
-	if (nenv == 0 && t->nsub == 1) {
-		fprintf(fd, "void");
-	} else {
+	//if (nenv == 0 && t->nsub == 1) {
+	//	fprintf(fd, "void");
+	//} else {
 		for (size_t i = 1; i < t->nsub; i++) {
+			if (i > 0) {
+				fprintf(fd, ", ");
+			}
 			if (t->sub[i]->type == Tyvalist)
 				fprintf(fd, "...");
 			else
@@ -1455,11 +1463,8 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 				Node *dcl = args[i - 1];
 				fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
 			}
-			if (i + 1 < t->nsub) {
-				fprintf(fd, ", ");
-			}
 		}
-	}
+	//}
 
 	fprintf(fd, ")");
 
@@ -1538,24 +1543,23 @@ emit_fndef(FILE *fd, Node *n, Node *dcl)
 	else
 		fprintf(fd, "_fn%d(", n->nid);
 
-	if (nenv > 0) {
-		fprintf(fd, "struct _envty$%d * $env%s", n->nid, nargs ? "," : "");
-	}
+	//if (nenv > 0) {
+	//	fprintf(fd, "struct _envty$%d * $env%s", n->nid, nargs ? "," : "");
+	//}
+	fprintf(fd, "void * $env");
 
-	if (nenv == 0 && t->nsub == 1) {
-		fprintf(fd, "void");
-	} else {
+	//if (nenv == 0 && t->nsub == 1) {
+	//	fprintf(fd, "void");
+	//} else {
 		for (size_t i = 1; i < t->nsub; i++) {
+			fprintf(fd, ", ");
 			fprintf(fd, "%s ", __ty(t->sub[i]));
 			if (i - 1 < nargs) {
 				Node *dcl = args[i - 1];
 				fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
 			}
-			if (i + 1 < t->nsub) {
-				fprintf(fd, ", ");
-			}
 		}
-	}
+	//}
 
 	fprintf(fd, ")\n");
 
@@ -2018,6 +2022,8 @@ typedef struct {
 	size_t *nout;
 	Node ***imports;
 	size_t *nimports;
+	Node ***vars;
+	size_t *nvars;
 	Type ***utypes;
 	size_t *nutypes;
 } S;
@@ -2048,12 +2054,6 @@ sort_decls_rec(
 				dcl = decls[n->expr.did];
 				sort_decls_rec(s, dcl, visited, tyvisited, count);
 				sort_types_rec(s->utypes, s->nutypes, n->expr.type, tyvisited);
-			} else {
-				dcl = mkdecl(Zloc, n->expr.args[0], n->expr.type);
-				dcl->decl.vis = Vishidden;
-				dcl->decl.isimport = 1;
-				dcl->decl.isconst = 1;
-				lappend(s->imports, s->nimports, dcl);
 			}
 			break;
 		case Olit:

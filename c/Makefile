@@ -15,8 +15,8 @@ include ../mk/c.mk
 test:
 	cd ..; MYR_MC=c/cm mbld clean lib/sys:sys
 	cd ..; MYR_MC=c/cm mbld clean lib/std:std:
-	cd ..; MYR_MC=c/cm mbld -j1 lib/sys:sys 2>&1 #| grep -A 20 -e 'error:' | tee sys.txt
-	cd ..; MYR_MC=c/cm mbld -j1 lib/std:std 2>&1 #| grep -A 20 -e 'error:' | tee std.txt
+	cd ..; MYR_MC=c/cm mbld -j1 lib/sys:sys 2>&1 #| grep -A 60 -e 'error:' | tee sys.txt
+	cd ..; MYR_MC=c/cm mbld -j1 lib/std:std 2>&1 #| grep -A 60 -e 'error:' | tee std.txt
 	#ld -o obj/hello /home/mural/src/myrlang.org/mc/out/lib/myr/_myrrt.o obj/tests/hello.o -L../obj/lib/std -lstd -L../obj/lib/sys -lsys
 	MYR_MC=./cm mbld -I../obj/lib/-I../obj/lib/sys -o obj -b hello tests/hello.myr 2>&1 | tee hello.txt
 
