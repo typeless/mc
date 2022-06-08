@@ -1043,10 +1043,11 @@ emit_objdecl(FILE *fd, Node *n)
 	assert(n->type == Ndecl);
 	char name[256];
 
-	if (n->decl.isextern || n->decl.isimport) {
+	if (n->decl.isextern) {
 		fprintf(fd, "extern ");
-	} else if (n->decl.isglobl) {
-		if (n->decl.vis == Visintern || n->decl.vis == Vishidden) {
+	}
+	if (n->decl.isglobl) {
+		if (n->decl.vis == Visintern) {
 			fprintf(fd, "static ");
 		}
 	}
