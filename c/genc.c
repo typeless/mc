@@ -28,6 +28,8 @@
  * 5. function literals are named '_fn{lit.fnval->nid}'
  */
 
+static Htab *globls;
+
 __USED static char *
 __ty(Type *t)
 {
@@ -999,19 +1001,17 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Ovar:
 		assert(n->expr.did);
-		dcl = decls[n->expr.did];
-
-
-		//dcl = decls[n->expr.did];
-		if (dcl->decl.isextern) {
-			fprintf(fd, "%s", asmname(dcl));
-		} else if (dcl->decl.isglobl) {
-			fprintf(fd, "%s" , asmname(dcl));
-		} else if (dcl->decl.isimport) {
-			fprintf(fd, "%s" , asmname(dcl));
-		} else {
-			fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
+		if (n->expr.did) {
+			dcl = decls[n->expr.did];
+			if (hthas(globls, dcl))
+				fprintf(fd, "%s", asmname(dcl));
+			else
+				fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
 		}
+
+		//if (hthas(file.globls->dcl, n)) {
+		//	fprintf(fd, "%s", asmname(dcl));
+		//}
 		break;
 	case Otupget:
 		assert(n->expr.args[0]->type == Nexpr);
@@ -1396,27 +1396,29 @@ vatypeinfo(Node *n)
 }
 
 void
-genfuncdecl(FILE *fd, Node *n, Node *init)
+genfuncdecl(FILE *fd, Node *n, Node *fnval)
 {
 	Type *t;
 	Node **args, **env;
 	size_t nargs, nenv;
 
-	t = tydedup(decltype(n));
+	if (n)
+		t = tydedup(decltype(n));
+	else
+		t = tydedup(fnval->func.type);
 
-	assert(n->type == Ndecl);
+	assert(n || fnval);
+	assert((fnval && fnval->type == Nfunc) || (n && n->type == Ndecl));
 	assert(t->type == Tyfunc || t->type == Tycode);
 	assert(t->nsub > 0);
 
 	nenv = 0;
 	nargs = 0;
-	if (init) {
-		env = getclosure(init->expr.args[0]->lit.fnval->func.scope, &nenv);
-		args = init->expr.args[0]->lit.fnval->func.args;
-		nargs = init->expr.args[0]->lit.fnval->func.nargs;
+	if (fnval) {
+		env = getclosure(fnval->func.scope, &nenv);
+		args = fnval->func.args;
+		nargs = fnval->func.nargs;
 	}
-
-	fprintf(fd, "/* %s : %s */\n", declname(n), tystr(t));
 
 	/* Declare a struct for storing closure environment */
 	if (nenv) {
@@ -1428,10 +1430,10 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 		fprintf(fd, "};\n\n");
 	}
 
-	if (n->decl.isextern || n->decl.isimport) {
+	if (n && (n->decl.isextern || n->decl.isimport)) {
 		fprintf(fd, "extern ");
 	}
-	if (!n->decl.isextern && !n->decl.isimport && n->decl.isglobl) {
+	if (n && !n->decl.isextern && !n->decl.isimport && n->decl.isglobl) {
 		if (n->decl.vis == Visintern) {
 			if (!streq(declname(n), "__init__") && !streq(declname(n), "__fini__") && !streq(declname(n), "main")) {
 				fprintf(fd, "static ");
@@ -1439,52 +1441,52 @@ genfuncdecl(FILE *fd, Node *n, Node *init)
 		}
 	}
 	fprintf(fd, "%s ", __ty(t->sub[0]));
-	fprintf(fd, "%s(", asmname(n));
+
+	if (n)
+		fprintf(fd, "%s(", asmname(n));
+	else
+		fprintf(fd, "_fn%d(", fnval->nid);
 
 	//if (nenv > 0) {
 	//	fprintf(fd, ", struct $%s$env %s%s", declname(n), "$env", nargs ? "," : "");
 	//}
-	fprintf(fd, "void * $env%s", nargs ? "," : "");
+	fprintf(fd, "void * $env ");
 
 	/* Insert the parameter for closure env (which may be an empty struct) */
 	//if (nenv == 0 && t->nsub == 1) {
 	//	fprintf(fd, "void");
 	//} else {
 		for (size_t i = 1; i < t->nsub; i++) {
-			if (i > 0) {
-				fprintf(fd, ", ");
-			}
+			fprintf(fd, ", ");
 			if (t->sub[i]->type == Tyvalist)
 				fprintf(fd, "...");
-			else
+			else {
 				fprintf(fd, "%s ", __ty(t->sub[i]));
-
-			if (i - 1 < nargs) {
-				Node *dcl = args[i - 1];
-				fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
+				if (i - 1 < nargs) {
+					Node *dcl = args[i - 1];
+					fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
+				}
 			}
 		}
 	//}
 
 	fprintf(fd, ")");
 
-	if (n->decl.vis == Vishidden || n->decl.isnoret) {
-		fprintf(fd, " __attribute__((");
-		if (n->decl.vis == Vishidden)
-			fprintf(fd, "visibility(\"hidden\"),");
-		if (n->decl.isnoret)
-			fprintf(fd, "noreturn,");
-		fprintf(fd,")) ");
+	if (!fnval) {
+		if (n->decl.vis == Vishidden || n->decl.isnoret) {
+			fprintf(fd, " __attribute__((");
+			if (n->decl.vis == Vishidden)
+				fprintf(fd, "visibility(\"hidden\"),");
+			if (n->decl.isnoret)
+				fprintf(fd, "noreturn,");
+			fprintf(fd,")) ");
+		}
 	}
 
-	if (init) {
+	if (fnval) {
 		fprintf(fd, "\n{\n");
-		assert(init->type == Nexpr);
-		assert(init->expr.op == Olit);
-		assert(init->expr.args[0]->type == Nlit);
-		assert(init->expr.args[0]->lit.littype == Lfunc);
 
-		emit_fnbody(fd, init->expr.args[0]->lit.fnval);
+		emit_fnbody(fd, fnval);
 		fprintf(fd, "}\n\n");
 	} else {
 		fprintf(fd, ";\n");
@@ -1511,7 +1513,7 @@ emit_fnenvty(FILE *fd, Node *n)
 	}
 }
 
-static void
+void
 emit_fndef(FILE *fd, Node *n, Node *dcl)
 {
 	Node **args, **env;
@@ -2405,8 +2407,7 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 				scan(fnvals, nfnval, fncalls, nfncalls, n->expr.args[i], visited);
 			break;
 		case Ovar:
-			assert(n->expr.did);
-			if (n->expr.did) {
+			if (isconstfn(n)) {
 				dcl = decls[n->expr.did];
 				assert(dcl);
 				init = dcl->decl.init;
@@ -2472,7 +2473,6 @@ genc(FILE *hd, FILE *fd)
 	size_t nfnvals, nfncalls, nobjdecls;
 	Bitset *visited;
 	Htab *fndcl;
-	Htab *globls;
 	Htab *refcnts;
 
 	globls = mkht(varhash, vareq);
@@ -2548,8 +2548,11 @@ genc(FILE *hd, FILE *fd)
 
 		//lappend(&sub, &nsub, ft->sub[0]);
 		for (j = 0; j < n->expr.nargs; j++) {
-			if (notsyscall && j < ft->nsub && tybase(ft->sub[j])->type == Tyvalist)
-				lappend(&args, &nargs, vatypeinfo(n));
+			if (notsyscall && j < ft->nsub && tybase(ft->sub[j])->type == Tyvalist) {
+				Node *vainfo = vatypeinfo(n);
+				lappend(&args, &nargs, vainfo);
+				lappend(&sub, &nsub, exprtype(vainfo));
+			}
 			if (tybase(exprtype(n->expr.args[j]))->type == Tyvoid)
 				continue;
 			lappend(&args, &nargs, n->expr.args[j]);
@@ -2558,12 +2561,6 @@ genc(FILE *hd, FILE *fd)
 		free(n->expr.args);
 		n->expr.args = args;
 		n->expr.nargs = nargs;
-
-		//free(ft->sub);
-		//ft->sub = sub;
-		//ft->nsub = nsub;
-		//free(dcl->decl.type);
-		//dcl->decl.type = tydup(ft);
 	}
 
 	/* Start to output C code */
@@ -2607,7 +2604,8 @@ genc(FILE *hd, FILE *fd)
 		dcl = htget(fndcl, fn);
 		assert(!dcl || dcl->type == Ndecl);
 		fprintf(fd, "/* nid:%d@%i */\n", fn->nid, lnum(n->loc));
-		emit_fndef(fd, fn, dcl);
+		//emit_fndef(fd, fn, dcl);
+		genfuncdecl(fd, dcl, fn);
 	}
 
 
