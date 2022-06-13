@@ -1355,6 +1355,7 @@ initvar(Node *n, Node *s)
 		t = s->decl.type;
 	}
 	n->expr.did = s->decl.did;
+	assert(n->expr.did);
 	n->expr.isconst = s->decl.isconst;
 	if (param) {
 		n->expr.param = param;
@@ -1855,7 +1856,13 @@ inferexpr(Node **np, Type *ret, int *sawret)
 		if (n->expr.param && !s->decl.trait)
 			fatal(n, "var %s must refer to a trait decl", ctxstr(args[0]));
 		pushenv(s->decl.env);
+		if (streq("Owronly", namestr(args[0]))) {
+			fprintf(stderr, "XXXX\n");
+		}
 		initvar(n, s);
+		if (streq("Owronly", namestr(args[0]))) {
+			fprintf(stderr, "did=%ld\n", n->expr.did);
+		}
 		popenv(s->decl.env);
 		break;
 	case Ogap:	/* _ -> @a */

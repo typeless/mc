@@ -42,14 +42,14 @@ __ty(Type *t)
 static char *
 __utagcname(Ucon *uc)
 {
-	//char *ns;
-	//char *name;
+	// char *ns;
+	// char *name;
 	char buf[128];
 
-	//ns = uc->name->name.ns;
-	//name = uc->name->name.name;
+	// ns = uc->name->name.ns;
+	// name = uc->name->name.name;
 
-	//snprintf(buf, sizeof(buf), "_%s%s%s", ns ? ns : "", ns ? "$" : "", name);
+	// snprintf(buf, sizeof(buf), "_%s%s%s", ns ? ns : "", ns ? "$" : "", name);
 	snprintf(buf, sizeof(buf), "_Ty%d_tag%ld", tydedup(uc->utype)->tid, uc->id);
 	return strdup(buf);
 }
@@ -139,7 +139,7 @@ asmname(Node *dcl)
 	name = n->name.name;
 	vis = "";
 	sep = "";
-	//if (asmsyntax == Plan9)
+	// if (asmsyntax == Plan9)
 	//	if (islocal(dcl))
 	//		vis = "<>";
 	if (!ns || !ns[0])
@@ -181,7 +181,7 @@ tydescid(char *buf, size_t bufsz, Type *ty)
 			ns = file.globls->name;
 			sep = "$";
 		}
-		bprintf(buf, bufsz, "_tydesc%s%s$%d",sep, ns, ty->tid);
+		bprintf(buf, bufsz, "_tydesc%s%s$%d", sep, ns, ty->tid);
 	}
 	return buf;
 }
@@ -249,7 +249,6 @@ genlocallblstr(char *buf, size_t sz)
 {
 	return genlblstr(buf, 128, "");
 }
-
 
 /**
  * We assume that every function literal is uniquely identified by its nid.
@@ -426,7 +425,7 @@ emit_call(FILE *fd, Node *n)
 	fv = n->expr.args[0];
 	ft = fv->expr.type;
 	args = &n->expr.args[1];
-	nargs = n->expr.nargs-1;
+	nargs = n->expr.nargs - 1;
 
 	if (isconstfn(fv)) {
 		emit_expr(fd, fv);
@@ -482,31 +481,65 @@ static void
 emit_assign(FILE *fd, Node *lhs, Node *rhs)
 {
 	switch (exprop(lhs)) {
-		case Ogap:
-			fprintf(fd, "(void)");
-			emit_expr(fd, rhs);
-			break;
-		case Otup:
-			emit_destructure(fd, lhs, rhs);
-			break;
-		case Oidx:
-		case Oderef:
-		case Omemb:
-		case Ovar:
-			emit_expr(fd, lhs);
-			fprintf(fd, " = ");
-			emit_expr(fd, rhs);
-			break;
-		default:
-			fatal(lhs, "Invalid lvalue operand of assignment");
+	case Ogap:
+		fprintf(fd, "(void)");
+		emit_expr(fd, rhs);
+		break;
+	case Otup:
+		emit_destructure(fd, lhs, rhs);
+		break;
+	case Oidx:
+	case Oderef:
+	case Omemb:
+	case Ovar:
+		emit_expr(fd, lhs);
+		fprintf(fd, " = ");
+		emit_expr(fd, rhs);
+		break;
+	default:
+		fatal(lhs, "Invalid lvalue operand of assignment");
 	}
+}
+
+static void
+emit_var(FILE *fd, Node *n)
+{
+	Node *name;
+	char *ns;
+	char *s;
+	char buf[128];
+	Node *dcl;
+
+	ns = NULL;
+	switch (n->type) {
+	case Ndecl:
+		name = n->decl.name;
+		ns = name->name.ns;
+		break;
+	case Nexpr:
+		name = n->expr.args[0];
+		assert(n->expr.did);
+		dcl = decls[n->expr.did];
+		ns = dcl->decl.name->name.ns;
+		break;
+	default:
+		assert(0);
+	}
+	s = namestr(name);
+
+	if (streq(s, "int")) {
+		snprintf(buf, sizeof(buf), "_%s", s);
+		s = strdup(buf);
+	}
+
+	fprintf(fd, "%s%s%s", ns ? ns : "", ns ? "$" : "", s);
 }
 
 static void
 emit_expr(FILE *fd, Node *n)
 {
 	Node **args;
-	Node *dcl;
+	// Node *dcl;
 	Ucon *uc;
 	size_t i, j;
 	char ch;
@@ -545,8 +578,7 @@ emit_expr(FILE *fd, Node *n)
 			case Tyuint32:
 				fprintf(fd, "UL");
 				break;
-			default:
-				;
+			default:;
 			}
 			break;
 		case Lflt:
@@ -606,7 +638,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "(");
 		fprintf(fd, "(const %s)", __ty(exprtype(n)));
 
-		fprintf(fd," {.elem = {");
+		fprintf(fd, " {.elem = {");
 		for (i = 0; i < n->expr.nargs; i++) {
 			emit_expr(fd, n->expr.args[i]);
 			if (i + 1 < n->expr.nargs) {
@@ -620,7 +652,7 @@ emit_expr(FILE *fd, Node *n)
 		fprintf(fd, "(");
 		fprintf(fd, "(const %s)", __ty(exprtype(n)));
 
-		fprintf(fd," {");
+		fprintf(fd, " {");
 
 		for (size_t i = 0; i < n->expr.nargs; i++) {
 			Type *t = tybase(exprtype(n));
@@ -630,7 +662,6 @@ emit_expr(FILE *fd, Node *n)
 				name = t->sdecls[j]->decl.name;
 				if (nameeq(memb->expr.idx, name))
 					break;
-
 			}
 			if (!name)
 				continue;
@@ -645,7 +676,7 @@ emit_expr(FILE *fd, Node *n)
 		uc = finducon(tybase(exprtype(n)), n->expr.args[0]);
 		fprintf(fd, "(");
 		fprintf(fd, "(const %s)", __ty(exprtype(n)));
-		fprintf(fd," {");
+		fprintf(fd, " {");
 		fprintf(fd, "._utag = %s,", __utagcname(uc));
 		if (n->expr.nargs == 2 && n->expr.args[1]) {
 			Type *etype = uc->etype;
@@ -880,7 +911,7 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Oidx:
 		emit_expr(fd, n->expr.args[0]);
-		switch  (exprtype(n->expr.args[0])->type) {
+		switch (exprtype(n->expr.args[0])->type) {
 		case Tyslice:
 			fprintf(fd, ".p");
 			break;
@@ -958,7 +989,7 @@ emit_expr(FILE *fd, Node *n)
 			break;
 		case Tyfunc:
 			emit_expr(fd, n->expr.args[0]);
-			fprintf(fd,"._func");
+			fprintf(fd, "._func");
 			break;
 		default:
 			emit_expr(fd, n->expr.args[0]);
@@ -1001,17 +1032,7 @@ emit_expr(FILE *fd, Node *n)
 		break;
 	case Ovar:
 		assert(n->expr.did);
-		if (n->expr.did) {
-			dcl = decls[n->expr.did];
-			if (hthas(globls, dcl))
-				fprintf(fd, "%s", asmname(dcl));
-			else
-				fprintf(fd, "_v%ld /* %s */", dcl->decl.did, declname(dcl));
-		}
-
-		//if (hthas(file.globls->dcl, n)) {
-		//	fprintf(fd, "%s", asmname(dcl));
-		//}
+		emit_var(fd, n);
 		break;
 	case Otupget:
 		assert(n->expr.args[0]->type == Nexpr);
@@ -1038,15 +1059,14 @@ emit_expr(FILE *fd, Node *n)
 }
 
 static void
-emit_objdecl(FILE *fd, Node *n)
+emit_objdecl(FILE *fd, Node *n, Node *init)
 {
 	assert(n->type == Ndecl);
 	char name[256];
 
-	if (n->decl.isextern) {
+	if (n->decl.isextern || n->decl.isimport) {
 		fprintf(fd, "extern ");
-	}
-	if (n->decl.isglobl) {
+	} else if (n->decl.isglobl) {
 		if (n->decl.vis == Visintern) {
 			fprintf(fd, "static ");
 		}
@@ -1057,20 +1077,15 @@ emit_objdecl(FILE *fd, Node *n)
 	}
 
 	fprintf(fd, "%s ", __ty(decltype(n)));
-	if (n->decl.isextern) {
-		snprintf(name, sizeof(name), "%s", asmname(n));
-	} else if(n->decl.isglobl) {
-		snprintf(name, sizeof(name), "%s", asmname(n));
-	} else if(n->decl.isimport) {
-		snprintf(name, sizeof(name), "%s", asmname(n));
-	} else {
-		snprintf(name, sizeof(name), "_v%ld", n->decl.did);
-	}
+	if (hthas(globls, n))
+		snprintf(name, sizeof(name), "%s ", asmname(n));
+	else
+		snprintf(name, sizeof(name), "%s ", namestr(n->decl.name));
 	fprintf(fd, "%s", name);
 
-	if (n->decl.init) {
+	if (init) {
 		fprintf(fd, " = ");
-		emit_expr(fd, fold(n->decl.init, 1));
+		emit_expr(fd, init);
 	}
 }
 
@@ -1149,7 +1164,7 @@ emit_stmt(FILE *fd, Node *n)
 		emit_block(fd, n);
 		break;
 	case Ndecl:
-		emit_objdecl(fd, n);
+		emit_objdecl(fd, n, n->decl.init);
 		break;
 	case Nifstmt:
 		fprintf(fd, "if (");
@@ -1175,7 +1190,7 @@ emit_stmt(FILE *fd, Node *n)
 		fprintf(fd, ";");
 		if (n->loopstmt.step)
 			emit_stmt(fd, n->loopstmt.step);
-		fprintf(fd,") {\n");
+		fprintf(fd, ") {\n");
 		emit_block(fd, n->loopstmt.body);
 		fprintf(fd, "}\n");
 		break;
@@ -1392,7 +1407,7 @@ vatypeinfo(Node *n)
 	tp = mkexpr(Zloc, Oaddr, ti, NULL);
 	tp->expr.type = mktyptr(n->loc, td->decl.type);
 
-	//htput(s->globls, td, asmname(td));
+	// htput(s->globls, td, asmname(td));
 	return tp;
 }
 
@@ -1448,27 +1463,27 @@ genfuncdecl(FILE *fd, Node *n, Node *fnval)
 	else
 		fprintf(fd, "_fn%d(", fnval->nid);
 
-	//if (nenv > 0) {
+	// if (nenv > 0) {
 	//	fprintf(fd, ", struct $%s$env %s%s", declname(n), "$env", nargs ? "," : "");
-	//}
+	// }
 	fprintf(fd, "void * $env ");
 
 	/* Insert the parameter for closure env (which may be an empty struct) */
-	//if (nenv == 0 && t->nsub == 1) {
+	// if (nenv == 0 && t->nsub == 1) {
 	//	fprintf(fd, "void");
-	//} else {
-		for (size_t i = 1; i < t->nsub; i++) {
-			fprintf(fd, ", ");
-			if (t->sub[i]->type == Tyvalist)
-				fprintf(fd, "...");
-			else {
-				fprintf(fd, "%s ", __ty(t->sub[i]));
-				if (i - 1 < nargs) {
-					Node *dcl = args[i - 1];
-					fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
-				}
+	// } else {
+	for (size_t i = 1; i < t->nsub; i++) {
+		fprintf(fd, ", ");
+		if (t->sub[i]->type == Tyvalist)
+			fprintf(fd, "...");
+		else {
+			fprintf(fd, "%s ", __ty(t->sub[i]));
+			if (i - 1 < nargs) {
+				Node *dcl = args[i - 1];
+				emit_var(fd, dcl);
 			}
 		}
+	}
 	//}
 
 	fprintf(fd, ")");
@@ -1480,7 +1495,7 @@ genfuncdecl(FILE *fd, Node *n, Node *fnval)
 				fprintf(fd, "visibility(\"hidden\"),");
 			if (n->decl.isnoret)
 				fprintf(fd, "noreturn,");
-			fprintf(fd,")) ");
+			fprintf(fd, ")) ");
 		}
 	}
 
@@ -1514,68 +1529,69 @@ emit_fnenvty(FILE *fd, Node *n)
 	}
 }
 
-void
-emit_fndef(FILE *fd, Node *n, Node *dcl)
-{
-	Node **args, **env;
-	size_t nargs, nenv;
-	Type *t;
-
-	assert(n->type == Nfunc);
-	assert(dcl == NULL || dcl->type == Ndecl);
-
-	nenv = 0;
-	nargs = 0;
-	env = getclosure(n->func.scope, &nenv);
-	args = n->func.args;
-	nargs = n->func.nargs;
-	t = n->func.type;
-
-	if (!n->decl.isextern && n->decl.isglobl) {
-		if (n->decl.vis == Visintern) {
-			if (!streq(declname(n), "__init__") && !streq(declname(n), "__fini__") && !streq(declname(n), "main")) {
-				fprintf(fd, "static ");
-			}
-		}
-	}
-
-	fprintf(fd, "%s ", __ty(t->sub[0]));
-
-	if (dcl)
-		fprintf(fd, "%s(", asmname(dcl));
-	else
-		fprintf(fd, "_fn%d(", n->nid);
-
-	//if (nenv > 0) {
-	//	fprintf(fd, "struct _envty$%d * $env%s", n->nid, nargs ? "," : "");
-	//}
-	fprintf(fd, "void * $env");
-
-	//if (nenv == 0 && t->nsub == 1) {
-	//	fprintf(fd, "void");
-	//} else {
-		for (size_t i = 1; i < t->nsub; i++) {
-			fprintf(fd, ", ");
-			fprintf(fd, "%s ", __ty(t->sub[i]));
-			if (i - 1 < nargs) {
-				Node *dcl = args[i - 1];
-				fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
-			}
-		}
-	//}
-
-	fprintf(fd, ")\n");
-
-	fprintf(fd, "{\n");
-
-	for (size_t i = 0; i < nenv; i++) {
-		Type *envty = decltype(env[i]);
-		fprintf(fd, "\t%s /* %s */ _v%ld = %s->_v%ld;\n", __ty(envty), tystr(envty), env[i]->decl.did, "$env", env[i]->decl.did);
-	}
-
-	emit_fnbody(fd, n);
-	fprintf(fd, "}\n\n");
-}
+// void
+// emit_fndef(FILE *fd, Node *n, Node *dcl)
+//{
+//	Node **args, **env;
+//	size_t nargs, nenv;
+//	Type *t;
+//
+//	assert(n->type == Nfunc);
+//	assert(dcl == NULL || dcl->type == Ndecl);
+//
+//	nenv = 0;
+//	nargs = 0;
+//	env = getclosure(n->func.scope, &nenv);
+//	args = n->func.args;
+//	nargs = n->func.nargs;
+//	t = n->func.type;
+//
+//	if (!n->decl.isextern && n->decl.isglobl) {
+//		if (n->decl.vis == Visintern) {
+//			if (!streq(declname(n), "__init__") && !streq(declname(n), "__fini__") && !streq(declname(n), "main")) {
+//				fprintf(fd, "static ");
+//			}
+//		}
+//	}
+//
+//	fprintf(fd, "%s ", __ty(t->sub[0]));
+//
+//	if (dcl)
+//		fprintf(fd, "%s(", asmname(dcl));
+//	else
+//		fprintf(fd, "_fn%d(", n->nid);
+//
+//	//if (nenv > 0) {
+//	//	fprintf(fd, "struct _envty$%d * $env%s", n->nid, nargs ? "," : "");
+//	//}
+//	fprintf(fd, "void * $env");
+//
+//	//if (nenv == 0 && t->nsub == 1) {
+//	//	fprintf(fd, "void");
+//	//} else {
+//		for (size_t i = 1; i < t->nsub; i++) {
+//			fprintf(fd, ", ");
+//			fprintf(fd, "%s ", __ty(t->sub[i]));
+//			if (i - 1 < nargs) {
+//				Node *dcl = args[i - 1];
+//				//fprintf(fd, " _v%ld /* %s */", dcl->decl.did, declname(dcl));
+//				fprintf(fd, " %s /*aa*/", asmname(dcl));
+//			}
+//		}
+//	//}
+//
+//	fprintf(fd, ")\n");
+//
+//	fprintf(fd, "{\n");
+//
+//	for (size_t i = 0; i < nenv; i++) {
+//		Type *envty = decltype(env[i]);
+//		fprintf(fd, "\t%s /* %s */ _v%ld = %s->_v%ld;\n", __ty(envty), tystr(envty), env[i]->decl.did, "$env", env[i]->decl.did);
+//	}
+//
+//	emit_fnbody(fd, n);
+//	fprintf(fd, "}\n\n");
+// }
 
 static void
 emit_forward_decl_rec(FILE *fd, Type *t, Bitset *visited)
@@ -1601,8 +1617,7 @@ emit_forward_decl_rec(FILE *fd, Type *t, Bitset *visited)
 			}
 		}
 		break;
-	default:
-		;
+	default:;
 	}
 }
 
@@ -1690,20 +1705,20 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		// fprintf(fd, " %s;\n", __ty(t));
 		break;
 	case Tystruct:
-		//fprintf(fd, "typedef struct {");
+		// fprintf(fd, "typedef struct {");
 		fprintf(fd, "struct %s {", __ty(t));
 		for (i = 0; i < t->nmemb; i++) {
 			fprintf(fd, "%s", __ty(decltype(t->sdecls[i])));
 			fprintf(fd, " %s;", declname(t->sdecls[i]));
 		}
-		//fprintf(fd, "} %s;", __ty(t));
+		// fprintf(fd, "} %s;", __ty(t));
 		fprintf(fd, "};\n");
 		fprintf(fd, "typedef struct %s %s;\n", __ty(t), __ty(t));
 		break;
 	case Tyunion:
 		fprintf(fd, "typedef struct {\n");
 		fprintf(fd, "enum {\n");
-		for( i = 0; i < t->nmemb; i++) {
+		for (i = 0; i < t->nmemb; i++) {
 			Ucon *uc = t->udecls[i];
 			fprintf(fd, "%s = %ld,\n", __utagcname(uc), i);
 		}
@@ -1740,7 +1755,7 @@ emit_typedef_rec(FILE *fd, Type *t, Bitset *visited)
 		// emit_type(fd, t->sub[0]);
 		//  fprintf(fd, " %s%s%s;\n", hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
 		fprintf(fd, "%s %s; /*%s%s%s*/", __ty(t->sub[0]), __ty(t), hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
-		//fprintf(fd, "struct { %s _; } %s ;; /*%s%s%s*/", __ty(t->sub[0]), __ty(t), hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
+		// fprintf(fd, "struct { %s _; } %s ;; /*%s%s%s*/", __ty(t->sub[0]), __ty(t), hasns ? t->name->name.ns : "", hasns ? "$" : "", t->name->name.name);
 		break;
 	case Typaram:
 		fprintf(fd, "typedef struct {}");
@@ -1795,11 +1810,14 @@ basename(char *s)
 {
 	/* Copy & paste from musl libc */
 	size_t i;
-	if (!s || !*s) return ".";
-	i = strlen(s)-1;
-	for (; i&&s[i]=='/'; i--) s[i] = 0;
-	for (; i&&s[i-1]!='/'; i--);
-	return s+i;
+	if (!s || !*s)
+		return ".";
+	i = strlen(s) - 1;
+	for (; i && s[i] == '/'; i--)
+		s[i] = 0;
+	for (; i && s[i - 1] != '/'; i--)
+		;
+	return s + i;
 }
 
 static void
@@ -1817,7 +1835,7 @@ emit_includes(FILE *fd)
 
 	for (i = 0; i < file.nfiles; i++) {
 		filename = basename(strdup(file.files[i]));
-		psuffix = strrchr(filename ,'+');
+		psuffix = strrchr(filename, '+');
 		if (!psuffix) {
 			psuffix = ".myr";
 		}
@@ -1844,7 +1862,7 @@ encodemin(FILE *fd, uvlong val)
 	}
 
 	for (i = 1; i < 8; i++)
-		if (val < 1ULL << (7*i))
+		if (val < 1ULL << (7 * i))
 			break;
 	shift = 8 - i;
 	b = ~0ull << (shift + 1);
@@ -1852,9 +1870,9 @@ encodemin(FILE *fd, uvlong val)
 	bytes = 1;
 	if (fd)
 		fprintf(fd, " 0x%02x,", b);
-	val >>=  shift;
+	val >>= shift;
 	while (val != 0) {
-		if(fd)
+		if (fd)
 			fprintf(fd, " 0x%02x,", (uint)val & 0xff);
 		val >>= 8;
 		bytes++;
@@ -1874,14 +1892,30 @@ writeblob_struct(FILE *fd, Blob *b, size_t *count)
 	if (!b)
 		return;
 	switch (b->type) {
-	case Btimin:	fprintf(fd, "\tuint8_t _iminv%ld[%ld];\n", (*count)++, encodemin(NULL, b->ival)); break;
-	case Bti8:	fprintf(fd, "\tuint8_t _i8v%ld;\n", (*count)++);	break;
-	case Bti16:	fprintf(fd, "\tuint16_t _i16v%ld;\n", (*count)++);	break;
-	case Bti32:	fprintf(fd, "\tuint32_t _i32v%ld;\n", (*count)++);	break;
-	case Bti64:	fprintf(fd, "\tuint64_t _i64v%ld;\n", (*count)++);	break;
-	case Btbytes:	fprintf(fd, "\tuint8_t _bytesv%ld[%ld];\n", (*count)++, b->bytes.len);	break;
-	case Btpad:	fprintf(fd, "\tuint8_t  _pad%ld[%lld];\n", (*count)++, b->npad);	break;
-	case Btref:	fprintf(fd, "\tvoid * _ref%ld;\n", (*count)++);	break;
+	case Btimin:
+		fprintf(fd, "\tuint8_t _iminv%ld[%ld];\n", (*count)++, encodemin(NULL, b->ival));
+		break;
+	case Bti8:
+		fprintf(fd, "\tuint8_t _i8v%ld;\n", (*count)++);
+		break;
+	case Bti16:
+		fprintf(fd, "\tuint16_t _i16v%ld;\n", (*count)++);
+		break;
+	case Bti32:
+		fprintf(fd, "\tuint32_t _i32v%ld;\n", (*count)++);
+		break;
+	case Bti64:
+		fprintf(fd, "\tuint64_t _i64v%ld;\n", (*count)++);
+		break;
+	case Btbytes:
+		fprintf(fd, "\tuint8_t _bytesv%ld[%ld];\n", (*count)++, b->bytes.len);
+		break;
+	case Btpad:
+		fprintf(fd, "\tuint8_t  _pad%ld[%lld];\n", (*count)++, b->npad);
+		break;
+	case Btref:
+		fprintf(fd, "\tvoid * _ref%ld;\n", (*count)++);
+		break;
 	case Btseq:
 		for (i = 0; i < b->seq.nsub; i++)
 			writeblob_struct(fd, b->seq.sub[i], count);
@@ -1915,14 +1949,30 @@ writeblob(FILE *fd, Blob *b)
 	if (!b)
 		return;
 	switch (b->type) {
-	case Btimin:	encodemin(fd, b->ival);	break;
-	case Bti8:	fprintf(fd, " 0x%02llx,\n", b->ival);	break;
-	case Bti16:	fprintf(fd, " 0x%04llx,\n", b->ival);	break;
-	case Bti32:	fprintf(fd, " 0x%08llx,\n", b->ival);	break;
-	case Bti64:	fprintf(fd, " 0x%016llx,\n", b->ival);	break;
-	case Btbytes:	writebytes(fd, b->bytes.buf, b->bytes.len);	break;
-	case Btpad:	fprintf(fd, " {0,},\n");	break;
-	case Btref:	fprintf(fd, " (char *)&%s + %zd,\n", b->ref.str, b->ref.off);	break;
+	case Btimin:
+		encodemin(fd, b->ival);
+		break;
+	case Bti8:
+		fprintf(fd, " 0x%02llx,\n", b->ival);
+		break;
+	case Bti16:
+		fprintf(fd, " 0x%04llx,\n", b->ival);
+		break;
+	case Bti32:
+		fprintf(fd, " 0x%08llx,\n", b->ival);
+		break;
+	case Bti64:
+		fprintf(fd, " 0x%016llx,\n", b->ival);
+		break;
+	case Btbytes:
+		writebytes(fd, b->bytes.buf, b->bytes.len);
+		break;
+	case Btpad:
+		fprintf(fd, " {0,},\n");
+		break;
+	case Btref:
+		fprintf(fd, " (char *)&%s + %zd,\n", b->ref.str, b->ref.off);
+		break;
 	case Btseq:
 		for (i = 0; i < b->seq.nsub; i++)
 			writeblob(fd, b->seq.sub[i]);
@@ -1944,9 +1994,9 @@ gentype(FILE *fd, Type *ty)
 	b = tydescblob(ty);
 	if (b->isglobl)
 		b->iscomdat = 1;
-	//if (asmsyntax == Gnugaself)
+	// if (asmsyntax == Gnugaself)
 	//	fprintf(fd, ".section .data.%s,\"aw\",@progbits\n", b->lbl);
-	
+
 	blob_id = 0;
 	fprintf(fd, "const struct _Tydesc%d {\n", ty->tid);
 	writeblob_struct(fd, b, &blob_id);
@@ -2031,18 +2081,28 @@ typedef struct {
 	size_t *nutypes;
 } S;
 
+int
+issmallconst(Node *dcl)
+{
+	Type *t;
+
+	if (!dcl->decl.isconst)
+		return 0;
+	if (!dcl->decl.init)
+		return 0;
+	t = tybase(exprtype(dcl->decl.init));
+	if (t->type <= Tyflt64)
+		return 1;
+	return 0;
+}
+
 static void
-sort_decls_rec(
-	S *s,
-	Node *n,
-	Bitset *visited,
-	Bitset *tyvisited,
-	Htab *count)
+sort_decls_rec(S *s, Node *n, Bitset *visited, Bitset *tyvisited, Htab *count)
 {
 	Node *dcl;
 	size_t i;
 	Bitset *mark;
-	//Stab *ns;
+	// Stab *ns;
 
 	if (!n)
 		return;
@@ -2064,8 +2124,7 @@ sort_decls_rec(
 			case Lfunc:
 				sort_decls_rec(s, n->expr.args[0], visited, tyvisited, count);
 				break;
-			default:
-				;
+			default:;
 			}
 			break;
 		default:
@@ -2100,9 +2159,8 @@ sort_decls_rec(
 			if (n->decl.init)
 				exprtype(n->decl.init)->type = Tycode;
 		}
-		if (n->decl.init) {
-			Node *c = n->decl.isconst ? fold(n->decl.init, 1) : n->decl.init;
-			sort_decls_rec(s, c, visited, tyvisited, count);
+		if (n->decl.init && !n->decl.isimport) {
+			sort_decls_rec(s, n->decl.init, visited, tyvisited, count);
 		}
 		sort_types_rec(s->utypes, s->nutypes, n->decl.type, tyvisited);
 		bsdel(mark, n->decl.did);
@@ -2124,8 +2182,7 @@ sort_decls_rec(
 			sort_decls_rec(s, n->lit.fnval, visited, tyvisited, count);
 			sort_types_rec(s->utypes, s->nutypes, n->lit.type, tyvisited);
 			break;
-		default:
-			;
+		default:;
 		}
 		break;
 	case Nfunc:
@@ -2195,7 +2252,7 @@ sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Type **
 	visited = mkbs();
 	tyvisited = mkbs();
 
-	s = (S){
+	s = (S) {
 		.out = out,
 		.nout = nout,
 		.imports = imports,
@@ -2213,11 +2270,7 @@ sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Type **
 
 		sort_decls_rec(&s, d, visited, tyvisited, count);
 		if (isconstfn(d))
-			assert(decltype(d)->type == Tycode 
-					&& (!d->decl.init 
-						|| (exprtype(d->decl.init)->type == Tycode 
-							&& d->decl.init->expr.args[0]->lit.type->type == Tycode 
-							&& d->decl.init->expr.args[0]->lit.fnval->func.type->type == Tycode)));
+			assert(decltype(d)->type == Tycode && (!d->decl.init || (exprtype(d->decl.init)->type == Tycode && d->decl.init->expr.args[0]->lit.type->type == Tycode && d->decl.init->expr.args[0]->lit.fnval->func.type->type == Tycode)));
 	}
 	popstab();
 	bsfree(tyvisited);
@@ -2229,7 +2282,7 @@ sort_decls(Node ***out, size_t *nout, Node ***imports, size_t *nimports, Type **
 	}
 
 	free(count);
-	//assert(*nout + *nimports == n);
+	// assert(*nout + *nimports == n);
 }
 
 static void
@@ -2263,7 +2316,6 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 	for (i = 0; i < nk; i++)
 		fprintf(fd, "/* sorted(%ld): %s did:%ld */\n", i, declname(k[i]), k[i]->decl.did);
 
-
 	emit_typedefs(fd, utypes, nutypes);
 
 	fprintf(fd, "/* START OF IMPORTS */\n");
@@ -2276,8 +2328,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		if (isconstfn(n)) {
 			genfuncdecl(fd, n, NULL);
 		} else {
-			n = fold(n, 1);
-			emit_objdecl(fd, n);
+			emit_objdecl(fd, n, NULL);
 			fprintf(fd, ";\n");
 		}
 	}
@@ -2291,7 +2342,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 			continue;
 		if (isconstfn(n))
 			continue;
-		emit_objdecl(fd, n);
+		emit_objdecl(fd, n, NULL);
 		fprintf(fd, ";\n");
 	}
 
@@ -2301,7 +2352,7 @@ emit_prototypes(FILE *fd, Htab *globls, Htab *refcnts)
 		if (isconstfn(n)) {
 			genfuncdecl(fd, n, NULL);
 		} else {
-			emit_objdecl(fd, n);
+			emit_objdecl(fd, n, n->decl.init);
 			fprintf(fd, ";\n");
 		}
 	}
@@ -2317,7 +2368,6 @@ gentypes(FILE *fd)
 	size_t i, nreflects;
 	Type **reflects;
 	char buf[512];
-
 
 	reflects = NULL;
 	nreflects = 0;
@@ -2414,12 +2464,13 @@ scan(Node ***fnvals, size_t *nfnval, Node ***fncalls, size_t *nfncalls, Node *n,
 				init = dcl->decl.init;
 				if (init)
 					scan(fnvals, nfnval, fncalls, nfncalls, init, visited);
-				else switch (dcl->decl.type->type) {
-				case Tyfunc:
-					lappend(fnvals, nfnval, n);
-					break;
-				default:;
-				}
+				else
+					switch (dcl->decl.type->type) {
+					case Tyfunc:
+						lappend(fnvals, nfnval, n);
+						break;
+					default:;
+					}
 			}
 			break;
 		default:
@@ -2547,7 +2598,7 @@ genc(FILE *hd, FILE *fd)
 		sub = NULL;
 		nsub = 0;
 
-		//lappend(&sub, &nsub, ft->sub[0]);
+		// lappend(&sub, &nsub, ft->sub[0]);
 		for (j = 0; j < n->expr.nargs; j++) {
 			if (notsyscall && j < ft->nsub && tybase(ft->sub[j])->type == Tyvalist) {
 				Node *vainfo = vatypeinfo(n);
@@ -2605,10 +2656,9 @@ genc(FILE *hd, FILE *fd)
 		dcl = htget(fndcl, fn);
 		assert(!dcl || dcl->type == Ndecl);
 		fprintf(fd, "/* nid:%d@%i */\n", fn->nid, lnum(n->loc));
-		//emit_fndef(fd, fn, dcl);
+		// emit_fndef(fd, fn, dcl);
 		genfuncdecl(fd, dcl, fn);
 	}
-
 
 	htfree(fndcl);
 	fprintf(fd, "\n");
