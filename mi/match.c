@@ -1074,8 +1074,8 @@ genmatchcode(Dtree *dt, Node ***out, size_t *nout)
 	}
 }
 
-void
-genonematch(Node *pat, Node *val, Node *iftrue, Node *iffalse, Node ***out, size_t *nout, Node ***cap, size_t *ncap)
+Dtree *
+genifdtree(Node *pat, Node *val, Node *iftrue, Node *iffalse, Node ***cap, size_t *ncap)
 {
 	Frontier **frontier;
 	size_t nfrontier;
@@ -1088,6 +1088,18 @@ genonematch(Node *pat, Node *val, Node *iftrue, Node *iffalse, Node ***out, size
 	lcat(cap, ncap, frontier[0]->cap, frontier[0]->ncap);
 	genfrontier(1, val, mkexpr(iffalse->loc, Ogap, NULL), iffalse, &frontier, &nfrontier);
 	root = compile(frontier, nfrontier);
+	root->load = root->load ? root->load : val;
+	if (!root->npat)
+		lappend(&root->pat, &root->npat, pat);
+	return root;
+}
+
+void
+genonematch(Node *pat, Node *val, Node *iftrue, Node *iffalse, Node ***out, size_t *nout, Node ***cap, size_t *ncap)
+{
+	Dtree *root;
+
+	root = genifdtree(pat, val, iftrue, iffalse, cap, ncap);
 	genmatchcode(root, out, nout);
 }
 

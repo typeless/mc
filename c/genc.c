@@ -1153,11 +1153,96 @@ emit_match(FILE *fd, Node *n)
 	fprintf(fd, "} while (0);\n");
 }
 
+static Node *
+traitfn(Trait *tr, char *fn, Type *ty)
+{
+	Node *proto, *dcl;
+	char *name;
+	size_t i;
+
+	for (i = 0; i < tr->nproto; i++) {
+		name = declname(tr->proto[i]);
+		if (!strcmp(fn, name)) {
+			proto = tr->proto[i];
+			dcl = htget(proto->decl.impls, ty);
+			return dcl;
+		}
+	}
+	return NULL;
+}
+
+static void
+emit_iterloop(FILE *fd, Node *n, int calltrait)
+{
+	Node **cap;
+	Dtree *dt;
+	Node *lbody, *lstep;
+	size_t ncap;
+
+	lbody = genlbl(n->iterstmt.body->loc);
+	lstep = genlbl(n->iterstmt.seq->loc);
+	cap = NULL;
+	ncap = 0;
+	dt = genifdtree(n->iterstmt.elt, n->iterstmt.seq, lbody, lstep, &cap, &ncap);
+
+	fprintf(fd, "for (");
+	if (calltrait) {
+		Trait *tr = traittab[Tciter];
+		Node *findcl = traitfn(tr, "__iterfin__", exprtype(n->iterstmt.seq));
+		emit_var(fd, findcl);
+		fprintf(fd, "(");
+		fprintf(fd, "&");
+		emit_expr(fd, n->iterstmt.seq);
+		fprintf(fd, ", ");
+		fprintf(fd, "&");
+		emit_expr(fd, n->iterstmt.elt);
+		fprintf(fd, ");\n");
+	} else {
+		fprintf(fd, "size_t i = 0");
+	}
+	fprintf(fd, ";");
+	fprintf(fd, "i < ((");
+	emit_expr(fd, n->iterstmt.seq);
+	fprintf(fd, ").len)");
+	fprintf(fd, ";");
+	if (calltrait) {
+		Trait *tr = traittab[Tciter];
+		Node *findcl = traitfn(tr, "__iternext__", exprtype(n->iterstmt.seq));
+		emit_var(fd, findcl);
+		fprintf(fd, "(");
+		fprintf(fd, "&");
+		emit_expr(fd, n->iterstmt.seq);
+		fprintf(fd, ", ");
+		fprintf(fd, "&");
+		emit_expr(fd, n->iterstmt.elt);
+		fprintf(fd, ");\n");
+	} else {
+		fprintf(fd, "i++");
+	}
+	fprintf(fd, ") {\n");
+
+	fprintf(fd, "switch (");
+	emit_expr(fd, dt->load);
+	fprintf(fd, ") {\n");
+	fprintf(fd, "case ");
+	emit_expr(fd, dt->pat[0]);
+	fprintf(fd, ":\n");
+	emit_block(fd, n->iterstmt.body);
+	fprintf(fd, "default:\n");
+	fprintf(fd, "continue;\n");
+	fprintf(fd, "}\n");
+
+	fprintf(fd, "}\n");
+
+	(void)cap;
+	(void)ncap;
+}
+
 static void
 emit_stmt(FILE *fd, Node *n)
 {
 
-	assert(n->type == Nblock || n->type == Ndecl || n->type == Nexpr || n->type == Nifstmt || n->type == Nmatchstmt || n->type == Nloopstmt);
+	assert(n->type == Nblock || n->type == Ndecl || n->type == Nexpr || n->type == Nifstmt || n->type == Nmatchstmt || n->type == Nloopstmt || n->type == Niterstmt);
 
 	switch (n->type) {
 	case Nblock:
@@ -1193,6 +1278,18 @@ emit_stmt(FILE *fd, Node *n)
 		fprintf(fd, ") {\n");
 		emit_block(fd, n->loopstmt.body);
 		fprintf(fd, "}\n");
+		break;
+	case Niterstmt:
+		switch (tybase(exprtype(n->iterstmt.seq))->type) {
+		case Tyarray:
+		case Tyslice:
+			emit_iterloop(fd, n, 0);
+			break;
+		default:
+			emit_iterloop(fd, n, 1);
+			break;
+		}
+
 		break;
 	case Nexpr:
 		emit_expr(fd, n);

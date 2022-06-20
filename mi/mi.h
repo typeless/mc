@@ -78,6 +78,7 @@ void check(Cfg *cfg);
 /* pattern matching */
 Dtree *gendtree(Node *m, Node *val, Node **lbl, size_t nlbl);
 void genmatch(Node *m, Node *val, Node ***out, size_t *nout);
+Dtree *genifdtree(Node *pat, Node *val, Node *iftrue, Node *i, Node ***cap, size_t *ncap);
 void genonematch(Node *pat, Node *val, Node *iftrue, Node *iffalse, Node ***out, size_t *nout, Node ***cap, size_t *ncap);
 
 /* tree flattening */
